@@ -1,7 +1,6 @@
 # Justin Benjamin
 # Synchrony Project
 
-
 # I am investigting hatching synchrony in Pūkeko (Porphyrio melanotus melanotus) 
 # as a possible evolutionary route to joint laying behaviour. 
 
@@ -13,12 +12,33 @@ library(glmmTMB)
 library(MASS)
 library(performance)
 library(tidyr)
+library(readxl)
+library(lubridate)
 
+# Read in data file
+data <- read_excel("GRD_data_2025.xlsx")
+View(data)
 
-read_xlsx()
+data_filtered <- data %>% filter(is.na(Exclusion) | Exclusion == "") %>%
+  mutate(unique_nest_ID = paste(Year, Nest_ID, sep = "_"))
+View(data_filtered)
 
-library(dplyr)
-library(ggplot2)
+hatch_spread <- data_filtered %>%
+  filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
+  mutate(
+    Hatch_begin = as.numeric(Hatch_begin),
+    Hatch_end = as.numeric(Hatch_end),
+    Hatch_spread = Hatch_end - Hatch_begin + 1)
+
+single_female <- data_filtered %>% filter(Clutch_size <= 5)
+joint_female <- data_filtered %>% filter(Clutch_size >= 6)
+
+single_hatch_spread <- hatch_spread %>% filter(Clutch_size <= 5)
+joint_hatch_spread <- hatch_spread %>% filter(Clutch_size >= 6)
+
+summary(single_hatch_spread$Hatch_spread)
+summary(joint_hatch_spread$Hatch_spread)
+
 
 # Example dataset (each row is an egg)
 hatching_data <- data.frame(
@@ -56,21 +76,15 @@ hatching_data <- data.frame(
   hatching_day = c(1, 2, 3, 1, 1, 2, 3))
 
 # Create a unique nest identifier
-hatching_data <- hatching_data %>%
+data_filtered <- data_filtered %>%
   mutate(unique_nest_ID = paste(year, nest_ID, sep = "_"))
 
 print(hatching_data)
 
 
-
-
-# Nests with 6 or more eggs considered a joint clutch
-# Nests with 5 or less eggs considered a single female clutch
 # Do one histogram of clutch proportion for each type of nest
 
-# Do mean and median hatch spread for single female and joint clutches 
 
-# Do mean and median hatching success for single and joint clutches 
 
 
 
