@@ -17,37 +17,6 @@ library(tidyr)
 
 read_xlsx()
 
-
-library(ggplot2)
-
-# Example data: Hatching days for individual eggs
-hatching_data <- data.frame(
-  hatching_day = c(1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 5, 1, 2, 4)  # Replace with your actual data
-)
-
-# Count occurrences of each hatching day
-hatch_counts <- table(hatching_data$hatching_day)
-
-# Convert to proportions
-hatch_proportions <- hatch_counts / sum(hatch_counts)
-
-# Convert to data frame for ggplot
-hatch_df <- data.frame(
-  hatching_day = as.numeric(names(hatch_counts)),
-  proportion = as.numeric(hatch_proportions)
-)
-
-# Plot histogram with proportions
-ggplot(hatch_df, aes(x = hatching_day, y = proportion)) +
-  geom_col(fill = "skyblue", color = "black") +
-  labs(title = "Proportion of Eggs Hatching by Day",
-       x = "Hatching Day",
-       y = "Proportion of Total Eggs") +
-  theme_classic()
-
-
-
-
 library(dplyr)
 library(ggplot2)
 
@@ -76,4 +45,32 @@ ggplot(hatch_distribution, aes(x = hatching_day, y = avg_prop_hatched)) +
   labs(x = "Hatching Day",
        y = "Mean Clutch Proportion") +
   theme_classic()
+
+
+
+
+# Example data set
+hatching_data <- data.frame(
+  year = c(2023, 2023, 2023, 2024, 2024, 2024, 2024),
+  nest_ID = c("A", "B", "C", "A", "B", "C", "D"),
+  hatching_day = c(1, 2, 3, 1, 1, 2, 3))
+
+# Create a unique nest identifier
+hatching_data <- hatching_data %>%
+  mutate(unique_nest_ID = paste(year, nest_ID, sep = "_"))
+
+print(hatching_data)
+
+
+
+
+# Nests with 6 or more eggs considered a joint clutch
+# Nests with 5 or less eggs considered a single female clutch
+# Do one histogram of clutch proportion for each type of nest
+
+# Do mean and median hatch spread for single female and joint clutches 
+
+# Do mean and median hatching success for single and joint clutches 
+
+
 
