@@ -132,7 +132,7 @@ data_proportions <- chick_data_filtered %>%
 # Plot violin graph
 ggplot(data_proportions, aes(x = as.factor(Hatch_day), y = Hatch_proportion)) +
   geom_violin(fill = "lightblue", alpha = 0.5) +  
-  geom_quasirandom(width = 0.2, size = 2, alpha = 0.7, color = "black", method = "smiley") +  
+  geom_jitter(width = 0.1, size = 2, alpha = 0.8) + 
   scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 60)) +  
   scale_x_discrete(drop = FALSE) + 
   labs(x = "Hatching Day",
@@ -152,7 +152,7 @@ data_proportions <- chick_data_filtered %>%
 
 ggplot(data_proportions, aes(x = as.factor(Hatch_day), y = Hatch_proportion)) +
   geom_violin(fill = "lightblue", alpha = 0.5) +  
-  geom_quasirandom(width = 0.2, size = 2, alpha = 0.7, color = "black", method = "smiley") +  
+  geom_jitter(width = 0.1, size = 2, alpha = 0.8) +
   scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 60)) +  
   scale_x_discrete(drop = FALSE) + 
   labs(x = "Hatching Day",
