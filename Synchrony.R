@@ -53,6 +53,15 @@ chick_data_filtered <- chick_data %>% filter(is.na(Exclusion) | Exclusion == "")
 View(chick_data_filtered)
 
 
+single_female <- chick_data_filtered %>% 
+  filter(Females == "Single Female")
+summary(single_female)
+
+joint_female <- chick_data_filtered %>% 
+  filter(Females == "Joint Females")
+summary(joint_female)
+
+
 # Histogram showing counts of hatching based on relative hatch days
 # separated between single female and joint female nests. 
 chick_data_filtered <- chick_data_filtered %>% filter(!is.na(Hatch_day))
