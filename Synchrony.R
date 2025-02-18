@@ -104,6 +104,14 @@ ggplot(data_proportions, aes(x = as.factor(Hatch_day), y = Hatch_proportion, gro
 
 
 
+experiment_data <- read_excel("Synchrony_experiment_GRD.xlsx")
+View(experiment_data)
 
+ggplot(experiment_data, aes(x = Treatment_Type, fill = factor(first_sur))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Treatment Type", y = "Count", fill = "Survival") +
+  scale_fill_manual(values = c("0" = "Black", "1" = "Grey")) +  
+  theme_classic()
+  
 
 
