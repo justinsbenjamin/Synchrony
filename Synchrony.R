@@ -122,15 +122,11 @@ ggplot(experiment_data, aes(x = Treatment_Type, fill = factor(first_sur))) +
 chick_data_filtered %>% 
   filter(Hatched_eggs > 1) 
 
-ggplot(chick_data_filtered, aes(x = Synchrony, y = Hatch_rate, fill = Synchrony)) +
-  geom_boxplot() +  # Boxplot to show distribution
+ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_spread)) +
   geom_jitter(width = 0.2, alpha = 0.5) +  # Adds points to show spread
-  labs(x = "Hatching Synchrony", y = "Hatching Success", 
-       title = "Hatching Success by Synchrony Category") +
-  theme_minimal() +
-  facet_wrap(~ Females) +
-  scale_fill_manual(values = c("Synchronous" = "#1b9e77", 
-                               "Semi_synchronous" = "#d95f02", 
-                               "Asynchronous" = "#7570b3"))
+  labs(x = "Relative Hatch Day", y = "Hatching Success") +
+  scale_x_continuous(breaks = seq(1, 11, by = 1)) +
+  theme_classic() +
+  facet_wrap(~ Females) 
 
 
