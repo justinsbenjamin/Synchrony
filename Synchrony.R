@@ -44,12 +44,17 @@ View(nest_data_filtered)
 # Add single female and joint female categories
 chick_data_filtered <- chick_data %>% filter(is.na(Exclusion) | Exclusion == "") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  left_join(nest_data_filtered %>% dplyr::select(Nest_ID, Clutch_size, Hatched_eggs), by = "Nest_ID") %>%
+  left_join(nest_data_filtered %>% dplyr::select(Nest_ID, Clutch_size, Hatched_eggs, Hatch_spread), by = "Nest_ID") %>%
   mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
   filter(!is.na(Females)) %>%
   mutate(Hatch_rate = Hatched_eggs / Clutch_size) %>%
   filter(!is.na(Hatch_rate)) %>% # Remove NAs if needed
-  group_by(Nest_ID)
+  group_by(Nest_ID) %>% 
+  mutate(Synchrony = case_when(
+    Hatch_spread >= 1 & Hatch_spread <= 5 ~ "Synchronous",
+    Hatch_spread >= 6 ~ "Asynchronous",
+    TRUE ~ NA_character_  # Handles missing or unexpected values
+  ))
 View(chick_data_filtered)
 
 
@@ -113,5 +118,19 @@ ggplot(experiment_data, aes(x = Treatment_Type, fill = factor(first_sur))) +
   scale_fill_manual(values = c("0" = "Black", "1" = "Grey")) +  
   theme_classic()
   
+
+chick_data_filtered %>% 
+  filter(Hatched_eggs > 1) 
+
+ggplot(chick_data_filtered, aes(x = Synchrony, y = Hatch_rate, fill = Synchrony)) +
+  geom_boxplot() +  # Boxplot to show distribution
+  geom_jitter(width = 0.2, alpha = 0.5) +  # Adds points to show spread
+  labs(x = "Hatching Synchrony", y = "Hatching Success", 
+       title = "Hatching Success by Synchrony Category") +
+  theme_minimal() +
+  facet_wrap(~ Females) +
+  scale_fill_manual(values = c("Synchronous" = "#1b9e77", 
+                               "Semi_synchronous" = "#d95f02", 
+                               "Asynchronous" = "#7570b3"))
 
 
