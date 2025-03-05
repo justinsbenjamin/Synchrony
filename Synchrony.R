@@ -130,3 +130,32 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
   facet_wrap(~ Females) 
 
 
+
+
+
+
+
+# library(glmmTMB)
+# library(MuMIn)  # For model selection and AIC ranking
+
+# model_full <- glmmTMB(Survived ~ (NestType + HatchingSpread + ClutchSize + GroupSize + 
+                                    # ObservationPeriod + ClutchNumber)^2 + 
+                        # (1 | Year/NestID), 
+                      # family = binomial, data = df)
+
+# models <- dredge(model_full, rank = "AICc")
+
+# model_list <- list(
+  # full = model_full,
+  # no_interactions = glmmTMB(Survived ~ NestType + HatchingSpread + ClutchSize + 
+                            # GroupSize + ClutchNumber + ObservationPeriod (1 | Year/NestID), 
+                            # family = binomial, data = df),
+  # null_model = glmmTMB(Survived ~ (1 | Year/NestID), 
+                          # family = binomial, data = df))
+
+# model_selection <- model.sel(model_list)
+# print(model_selection)
+
+
+
+
