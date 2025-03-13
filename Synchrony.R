@@ -1,11 +1,16 @@
 # Justin Benjamin
 # Synchrony Project
 
-# I am investigting hatching synchrony in Pūkeko 
-# (Porphyrio melanotus melanotus) as a possible evolutionary route 
-# to joint laying behaviour. I will be exploring the hatching spread, 
-# hatching rate, and survival of single female and joint female nests 
-# and looking at the distribution of hatching. 
+# I am investigating hatching synchrony in Pūkeko (Porphyrio melanotus melanotus) 
+# as a possible evolutionary route to joint laying behaviour in this species. 
+# I hypothesize that jointly laying synchronously with a close relative increases
+# the inclusive fitness of the dominant female compared to hypothetical 
+# prolonged laying by a single female. 
+# I will be exploring the estimated and true hatching spread, hatching rate, 
+# and survival of single female and joint female nests and looking at 
+# the distribution of hatching. I am interested to see if factors like 
+# clutch size, group size, clutch number, joint/single female clutches, and level 
+# of inbreeding have impacts on hatching synchrony and reproductive success. 
 
 # Load libraries
 library(dplyr)
@@ -83,7 +88,7 @@ ggplot(chick_data_filtered, aes(x = Hatch_day, weight = Hatch_day)) +
 
 
 ###############################
-##### This is the good figure!!!!
+##### This is the good figure!!!! ####
 ###############################
 
 data_proportions <- chick_data_filtered %>%
@@ -131,7 +136,8 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 
 
 
-
+# Make a scatter plot with hatching spread on the x axis and hatching success
+# on the y axis. See if there is any trends 
 
 
 
@@ -156,6 +162,70 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 # model_selection <- model.sel(model_list)
 # print(model_selection)
 
+
+
+
+
+
+
+
+
+
+#### POWER ANALYSIS STUFF ####
+
+# Solve for the effect size needed to achieve 80% power with a sample size of 50
+desired_sample_size = 50
+
+effect_size_required = power_analysis.solve_power(alpha=alpha, power=power, nobs1=desired_sample_size, alternative='two-sided')
+effect_size_required
+
+install.packages("pwr")  # Run this if you haven't installed the package
+library(pwr)
+
+# Set parameters
+sample_size <- 60    # Desired sample size
+alpha <- 0.05        # Significance level
+power <- 0.8         # Desired power
+effect_size <- 0.30  # Desired effect size  
+
+# Solve for effect size needed
+effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, power = power, alternative = "two.sided")$h
+print(effect_size)
+
+# Solve for effect size needed
+sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, power = power, alternative = "two.sided")$n
+print(sample_size)
+
+
+
+
+
+
+
+
+#### Synchrony experiment stuff ####
+
+
+# library(glmmTMB)
+# library(MuMIn)  # For model selection and AIC ranking
+
+# model_full <- glmmTMB(Survived ~ (Treatment + Estimated_Hatch_Spread + ClutchSize + 
+# GroupSize + ObservationPeriod + ClutchNumber + native_foreign eggs)^2 + 
+# (1 | Year/NestID), 
+# family = binomial, data = df)
+
+# models <- dredge(model_full, rank = "AICc")
+
+# model_list <- list(
+# full = model_full,
+# no_interactions = glmmTMB(Survived ~ NestType + HatchingSpread + ClutchSize + 
+# GroupSize + ClutchNumber + ObservationPeriod (1 | Year/NestID), 
+# family = binomial, data = df),
+# null_model = glmmTMB(Survived ~ (1 | Year/NestID), 
+# family = binomial, data = df))
+
+# model_selection <- model.sel(model_list)
+# print(model_selection)
 
 
 
