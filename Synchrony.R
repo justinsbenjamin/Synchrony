@@ -22,6 +22,7 @@ library(tidyr)
 library(readxl)
 library(lubridate)
 library(ggbeeswarm)
+library(effectsize)
 
 # Read in data files
 nest_data <- read_excel("GRD_data_2025.xlsx")
@@ -229,5 +230,56 @@ print(sample_size)
 
 
 
-read_excel("Compiled_synchrony_experiment_data.xlsx")
+experiment_data <- read_excel("Compiled_experiment_data.xlsx")  %>% 
+  mutate(Hatch_success = Hatched/Manipulated_clutch_size) %>%
+  filter(Hatch_success != "NA") %>%
+  filter(Treatment != "Control") %>% filter(Treatment != "Other")
+View(experiment_data)
+
+tapply(experiment_data$Hatch_success, experiment_data$Treatment, summary, na.rm = TRUE)
+
+nest_summary <- experiment_data %>%
+  group_by(Nest, Treatment) %>% 
+  filter(Hatch_success > 0) %>%
+  summarize(MeanHatchSuccess = mean(Hatch_success), .groups = "drop")
+
+# Create boxplot with jittered points
+ggplot(nest_summary, aes(x = Treatment, y = MeanHatchSuccess, color = Treatment)) +
+  geom_boxplot(outlier.shape = NA) +  # Boxplot without outliers
+  geom_jitter(width = 0.2, size = 3, alpha = 0.7) +  # Jittered points
+  labs(y = "Mean Hatching Success", x = "Treatment") +
+  theme_minimal() +
+  scale_color_manual(values = c("Asynch" = "blue", "Synch" = "red"))
+
+(t.test(Hatch_success ~ Treatment, data = experiment_data))
+
+library(rstatix)
+
+cohens_d(Hatch_success ~ Treatment, data = experiment_data)
+
+
+#### POWER ANALYSIS STUFF ####
+
+# Solve for the effect size needed to achieve 80% power with a sample size of 50
+desired_sample_size = 50
+
+effect_size_required = power_analysis.solve_power(alpha=alpha, power=power, nobs1=desired_sample_size, alternative='two-sided')
+effect_size_required
+
+install.packages("pwr")  # Run this if you haven't installed the package
+library(pwr)
+
+# Set parameters
+sample_size <- 60    # Desired sample size
+alpha <- 0.05        # Significance level
+power <- 0.8         # Desired power
+effect_size <- 0.599  # Desired effect size  
+
+# Solve for effect size needed
+effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, power = power, alternative = "two.sided")$h
+print(effect_size)
+
+# Solve for effect size needed
+sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, power = power, alternative = "two.sided")$n
+print(sample_size)
 
