@@ -229,5 +229,5 @@ print(sample_size)
 
 
 
-
+read_excel("Compiled_synchrony_experiment_data")
 
