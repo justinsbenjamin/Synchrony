@@ -200,6 +200,7 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 
 experiment_data <- read_excel("Compiled_experiment_data.xlsx")  %>% 
   mutate(Hatch_success = Hatched/Manipulated_clutch_size) %>%
+  mutate(Foreign_percentage = Foreign_eggs/Manipulated_clutch_size) %>%
   filter(Hatch_success != "NA") %>%
   filter(Treatment != "Control") %>% filter(Treatment != "Other")
 View(experiment_data)
@@ -210,18 +211,35 @@ tapply(experiment_data$Surival_60, experiment_data$Treatment, summary, na.rm = T
 
 
 
-nest_summary <- experiment_data %>%
-  group_by(Nest, Treatment) %>% 
-  filter(Hatch_success > 0) %>%
-  summarize(MeanHatchSuccess = mean(Hatch_success), .groups = "drop")
 
-# Create boxplot with jittered points
-ggplot(nest_summary, aes(x = Treatment, y = MeanHatchSuccess, color = Treatment)) +
-  geom_boxplot(outlier.shape = NA) +  # Boxplot without outliers
-  geom_jitter(width = 0.2, size = 3, alpha = 0.7) +  # Jittered points
-  labs(y = "Mean Hatching Success", x = "Treatment") +
-  theme_minimal() +
-  scale_color_manual(values = c("Asynch" = "blue", "Synch" = "red"))
+
+# Boxplot with jittered points
+
+# Hatch success plot
+successful_nests <- experiment_data %>% filter(Hatch_success >0)
+ggplot(successful_nests, aes(x = Treatment, y = Hatch_success, color = Treatment)) +
+  geom_boxplot(outlier.shape = NA, width = 0.5) +  
+  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) + 
+  labs(y = "Hatch rate", x = "Treatment") +
+  theme_classic() +
+  scale_color_manual(values = c("Asynch" = "darkblue", "Synch" = "firebrick2"))
+
+# Number of swapped (foreign) eggs in nest plot
+ggplot(experiment_data, aes(x = Treatment, y = Foreign_percentage, color = Treatment)) +
+  geom_boxplot(outlier.shape = NA, width = 0.5) +  
+  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) +  
+  labs(y = "Percentage of foreign eggs in nest", x = "Treatment") +
+  theme_classic() +
+  scale_color_manual(values = c("Asynch" = "darkblue", "Synch" = "firebrick2"))
+
+# Clutch size plot
+ggplot(experiment_data, aes(x = Treatment, y = Manipulated_clutch_size, color = Treatment)) +
+  geom_boxplot(outlier.shape = NA) +  
+  geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
+  labs(y = "Clutch size", x = "Treatment") +
+  theme_classic() +
+  scale_color_manual(values = c("Asynch" = "darkblue", "Synch" = "firebrick2"))
+
 
 
 data_expanded <- experiment_data %>%
