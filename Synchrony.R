@@ -172,7 +172,7 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 
 
 
-#### Synchrony experiment stuff ####
+#### SYNCHRONY EXPERIMENT ####
 
 experiment_data <- read_excel("Compiled_experiment_data.xlsx")  %>% 
   mutate(Hatch_success = Hatched/Manipulated_clutch_size) %>%
@@ -212,7 +212,6 @@ ggplot(experiment_data, aes(x = Treatment, y = Manipulated_clutch_size, color = 
   scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
 
 # Hatch spread plot
-hatchspread <- experiment_data %>% filter(Hatch_spread != "NA")
 ggplot(experiment_data, aes(x = Treatment, y = as.numeric(Hatch_spread), color = Treatment)) +
   geom_boxplot(outlier.shape = NA) +  
   geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
@@ -220,6 +219,7 @@ ggplot(experiment_data, aes(x = Treatment, y = as.numeric(Hatch_spread), color =
   guides(color = FALSE) +
   theme_classic() +
   scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
+
 
 # Modify data frame into longer format
 data_expanded <- experiment_data %>%
