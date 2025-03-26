@@ -22,7 +22,6 @@ library(tidyr)
 library(readxl)
 library(lubridate)
 library(ggbeeswarm)
-library(effectsize)
 
 # Read in data files
 nest_data <- read_excel("GRD_data_2025.xlsx")
@@ -172,37 +171,6 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 
 
 
-#### POWER ANALYSIS STUFF ####
-
-# Solve for the effect size needed to achieve 80% power with a sample size of 50
-desired_sample_size = 50
-
-effect_size_required = power_analysis.solve_power(alpha=alpha, power=power, nobs1=desired_sample_size, alternative='two-sided')
-effect_size_required
-
-install.packages("pwr")  # Run this if you haven't installed the package
-library(pwr)
-
-# Set parameters
-sample_size <- 60    # Desired sample size
-alpha <- 0.05        # Significance level
-power <- 0.8         # Desired power
-effect_size <- 0.30  # Desired effect size  
-
-# Solve for effect size needed
-effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, power = power, alternative = "two.sided")$h
-print(effect_size)
-
-# Solve for effect size needed
-sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, power = power, alternative = "two.sided")$n
-print(sample_size)
-
-
-
-
-
-
-
 
 #### Synchrony experiment stuff ####
 
@@ -237,6 +205,10 @@ experiment_data <- read_excel("Compiled_experiment_data.xlsx")  %>%
 View(experiment_data)
 
 tapply(experiment_data$Hatch_success, experiment_data$Treatment, summary, na.rm = TRUE)
+tapply(experiment_data$Surival_60, experiment_data$Treatment, summary, na.rm = TRUE)
+
+
+
 
 nest_summary <- experiment_data %>%
   group_by(Nest, Treatment) %>% 
@@ -251,35 +223,59 @@ ggplot(nest_summary, aes(x = Treatment, y = MeanHatchSuccess, color = Treatment)
   theme_minimal() +
   scale_color_manual(values = c("Asynch" = "blue", "Synch" = "red"))
 
+
+data_expanded <- experiment_data %>%
+  mutate(NonSurvivors = Hatched - Surival_60) %>% # Calculate non-survivors
+  select(Nest, Treatment, Surival_60, NonSurvivors) %>%
+  pivot_longer(cols = c(Surival_60, NonSurvivors), 
+                      names_to = "Status", 
+                      values_to = "Count") %>%
+  mutate(Surival_60 = ifelse(Status == "Surival_60", 1, 0)) %>%
+  uncount(Count) %>%
+  select(Nest, Treatment, Surival_60)
+View(data_expanded)
+
+
+# Bar plot of survival data
+ggplot(data_expanded, aes(x = Treatment, fill = factor(Surival_60))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Treatment", y = "count", fill = "Surival_60") +
+  scale_fill_manual(values = c("0" = "Black", "1" = "Grey")) +  
+  theme_classic()
+  
+
+
+
+
+
+
+
+
+
+
 (t.test(Hatch_success ~ Treatment, data = experiment_data))
 
-library(rstatix)
-
-cohens_d(Hatch_success ~ Treatment, data = experiment_data)
 
 
 #### POWER ANALYSIS STUFF ####
 
-# Solve for the effect size needed to achieve 80% power with a sample size of 50
-desired_sample_size = 50
-
-effect_size_required = power_analysis.solve_power(alpha=alpha, power=power, nobs1=desired_sample_size, alternative='two-sided')
-effect_size_required
-
-install.packages("pwr")  # Run this if you haven't installed the package
 library(pwr)
+library(rstatix)
 
-# Set parameters
-sample_size <- 60    # Desired sample size
+cohens_d(Hatch_success ~ Treatment, data = experiment_data)
+cohens_d(Surival_60 ~ Treatment, data = experiment_data)
+
+# Setting the parameters
+sample_size <- 17    # Sample size
 alpha <- 0.05        # Significance level
-power <- 0.8         # Desired power
-effect_size <- 0.599  # Desired effect size  
+power <- 0.8         # Power
+effect_size <- 0.6   # Effect size  
 
 # Solve for effect size needed
 effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, power = power, alternative = "two.sided")$h
 print(effect_size)
 
-# Solve for effect size needed
+# Solve for sample size needed
 sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, power = power, alternative = "two.sided")$n
 print(sample_size)
 
