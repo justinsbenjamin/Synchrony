@@ -297,3 +297,13 @@ print(sample_size)
 
 # model_selection <- model.sel(model_list)
 # print(model_selection)
+
+
+experiment_chick_data <- read.csv("chick_measurements_2018_last_obs.csv")  %>% 
+  filter(Final_age_seen > 20) 
+View(experiment_chick_data)
+
+
+ggplot(experiment_chick_data, aes(x = Hatch_order, y = Final_age_seen, colour = Treatment_Type)) +
+  geom_point() +
+  theme_classic()
