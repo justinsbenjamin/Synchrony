@@ -164,6 +164,59 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 
 
 
+#### Weighting nests by hatching synchrony using Shannon entropy and by hatching success. 
+# Score calculated by a weighted hatching synchrony multiplied by hatching
+# success to give new weight for nests combining both factors. Nests with higher
+# synchrony and higher success weighted the highest. 
+
+# 1. Entropy-weighting function
+# alpha: emphasis on synchrony (entropy). Can choose to weight synchrony greater 
+# or less than hatching success. 
+# beta: emphasis on hatching success. Can choose to weight hatching success greater 
+# or less than synchrony. 
+# epsilon: small constant to prevent divide-by-zero
+calculate_synchrony_weights <- function(data, alpha = 1, beta = 1, epsilon = 0.1) {
+
+results <- lapply(names(data), function(nest_name) {
+  nest <- nest_data[[nest_name]]
+  hatch_days <- nest$hatch_days
+  eggs_laid <- nest$eggs_laid
+  eggs_hatched <- length(hatch_days)
+    
+# Hatching success
+success_rate <- eggs_hatched / eggs_laid
+    
+# Entropy of hatch days
+p <- table(hatch_days) / eggs_hatched
+entropy <- -sum(p * log2(p))
+    
+# Inversing synchrony weight (lower entropy = higher weight)
+synchrony_weight <- 1 / (entropy + epsilon)
+    
+# Final combined weight with adjustable emphasis
+combined_weight <- (synchrony_weight ^ alpha) * (success_rate ^ beta)
+    
+return(data.frame(
+  Nest = nest_name,
+  Entropy = round(entropy, 3),
+  SuccessRate = round(success_rate, 3),
+  RawWeight = combined_weight
+    ))
+  }) %>% bind_rows()
+  
+# Re-scaling weights to between 0 and 1. 
+results$ScaledWeight <- round(results$RawWeight / max(results$RawWeight), 3)
+  return(results)
+}
+
+####
+
+
+
+
+
+
+
 
 
 
