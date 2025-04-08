@@ -209,6 +209,92 @@ results$ScaledWeight <- round(results$RawWeight / max(results$RawWeight), 3)
   return(results)
 }
 
+# Example data
+nests <- list(
+A = list(hatch_days = c(1,1,1,1,1), eggs_laid = 5),
+B = list(hatch_days = c(1,1,1,1,2), eggs_laid = 8),
+C = list(hatch_days = c(1,1,2,3), eggs_laid = 6),
+D = list(hatch_days = c(1,2,4), eggs_laid = 5),
+E = list(hatch_days = c(1,2,3,4,5), eggs_laid = 5),
+F = list(hatch_days = c(1,1,1,2), eggs_laid = 5),
+G = list(hatch_days = c(1,1,1,1,2,2,2), eggs_laid = 8),
+H = list(hatch_days = c(1,1,2,2), eggs_laid = 6),
+I = list(hatch_days = c(1,1,3), eggs_laid = 4),
+J = list(hatch_days = c(1,1,2,4,5), eggs_laid = 7)  
+)
+
+# Run with default alpha and beta
+weights <- calculate_synchrony_weights(nests)
+print(weights)
+
+# Run with more emphasis on synchrony
+weights_emphasized <- calculate_synchrony_weights(nests, alpha = 2, beta = 1)
+print(weights_emphasized)
+
+
+
+
+# Robust entropy calculator
+calculate_entropy <- function(hatch_days) {
+  if (length(hatch_days) == 0) return(NA_real_)
+  
+  p <- table(hatch_days) / length(hatch_days)
+  if (length(p) == 1) return(0)  # All on same day = perfect synchrony
+  
+  return(-sum(p * log2(p)))
+}
+
+# Main function
+calculate_synchrony_weights <- function(nest_data, alpha = 1, beta = 1, epsilon = 0.1) {
+  results <- lapply(names(nest_data), function(nest_name) {
+    nest <- nest_data[[nest_name]]
+    hatch_days <- nest$hatch_days
+    eggs_laid <- nest$eggs_laid
+    eggs_hatched <- length(hatch_days)
+    
+    # Skip bad nests
+    if (eggs_laid == 0 || eggs_hatched == 0) return(NULL)
+    
+    success_rate <- eggs_hatched / eggs_laid
+    entropy <- calculate_entropy(hatch_days)
+    if (is.na(entropy)) return(NULL)  # just in case
+    
+    synchrony_weight <- 1 / (entropy + epsilon)
+    combined_weight <- (synchrony_weight ^ alpha) * (success_rate ^ beta)
+    
+    data.frame(
+      Nest = nest_name,
+      Entropy = round(entropy, 3),
+      SuccessRate = round(success_rate, 3),
+      RawWeight = combined_weight
+    )
+  }) %>% bind_rows()
+  
+  # Rescale between 0 and 1
+  results$ScaledWeight <- round(results$RawWeight / max(results$RawWeight), 3)
+  
+  return(results)
+}
+
+# Printed results in alphabetical order
+weights <- calculate_synchrony_weights(nests)
+print(weights)
+
+# Printed results in order of weights highest to lowest
+weights <- calculate_synchrony_weights(nests, alpha = 1, beta = 1, epsilon = 0.1) %>%
+  arrange(desc(ScaledWeight))
+print(weights)
+
+
+
+
+
+
+
+
+
+
+
 ####
 
 
