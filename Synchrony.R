@@ -431,3 +431,15 @@ View(experiment_chick_data)
 ggplot(experiment_chick_data, aes(x = Hatch_order, y = Final_age_seen, colour = Treatment_Type)) +
   geom_point() +
   theme_classic()
+
+
+
+
+# Survival data conservative estimate with number of banded juveniles as true number
+
+
+
+# Survival data with liberal estimate number of chicks that hatched
+mutate(Survival_60 = Hatched_eggs)
+mutate(Survival_60 = Hatched_eggs)
+
