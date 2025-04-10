@@ -443,3 +443,24 @@ ggplot(experiment_chick_data, aes(x = Hatch_order, y = Final_age_seen, colour = 
 mutate(Survival_60 = Hatched_eggs)
 mutate(Survival_60 = Hatched_eggs)
 
+
+
+
+
+masterlist_data <- read_excel("Nests_masterlist.xlsx")
+masterlist_data <- masterlist_data %>% filter(Exclusion == "GOOD") %>%
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
+  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
+  filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
+  mutate(
+    Hatch_begin = as.numeric(Hatch_begin),
+    Hatch_end = as.numeric(Hatch_end),
+    Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
+  filter(survive_1 != 0 & survive_1 != "NA") %>%
+  filter(Survived_2 != "NA" & Survived_2 != "2?")
+View(masterlist_data)
+
+ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
+  geom_point()
+
+
