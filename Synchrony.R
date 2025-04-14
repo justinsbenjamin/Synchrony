@@ -298,38 +298,71 @@ print(weights)
 
 #### SYNCHRONY EXPERIMENT ####
 
-experiment_data <- read_excel("Compiled_experiment_data.xlsx")  %>% 
-  mutate(Hatch_success = Hatched/Manipulated_clutch_size) %>%
+experiment_data <- read_excel("Synchrony_experiment_data.xlsx")  %>%
+  mutate(Nest_ID = paste(Year, Nest, sep = "_")) %>%
+  group_by(Nest_ID, Final_manipulated_clutch) %>%
+  mutate(Hatch_success = sum(Hatched, na.rm = TRUE) / Final_manipulated_clutch) %>%
+  filter(Treatment != "Control") %>%
+  rename(Survival_60 = Surival_60) %>%
+  ungroup() %>%
+  count(Treatment, Survival_60)
+
+experiment_data <- read_excel("Synchrony_experiment_data.xlsx")  %>%
+  mutate(Nest_ID = paste(Year, Nest, sep = "_")) %>%
+  group_by(Nest_ID, Final_manipulated_clutch) %>%
+  mutate(Hatch_success = sum(Hatched, na.rm = TRUE) / Final_manipulated_clutch) %>%
+  filter(Hatch_success >0) %>%
+  filter(Treatment != "Control") %>%
+  rename(Survival_60 = Surival_60) %>%
+  ungroup() %>%
+  count(Treatment, Survival_60)
+
+
+
+
+experiment_data_2 <- read_excel("Compiled_synchrony_experiment_data.xlsx") %>%
+  mutate(Nest_ID = paste(Year, Nest, sep = "_")) %>%
+  mutate(Hatch_success = Hatched/ Manipulated_clutch_size)  %>%
   mutate(Foreign_percentage = Foreign_eggs/Manipulated_clutch_size) %>%
-  filter(Hatch_success != "NA") %>%
-  filter(Treatment != "Control") %>% filter(Treatment != "Other")
-View(experiment_data)
+  filter(Treatment != "Control", Treatment != "Other") %>%
+  count(Treatment, Hatched)
+  rename(Survival_60 = Surival_60) %>%
+  mutate(Treatment = recode(Treatment,
+                            "Synch" = "Synchronous",
+                            "Asynch" = "Asynchronous"))
+  
 
 # Boxplots with jitter points
 
 # Hatch success plot
-successful_nests <- experiment_data %>% filter(Hatch_success >0)
+successful_nests <- experiment_data %>% filter(Hatch_success >0) %>%
+  group_by(Nest_ID) %>%
+  summarise(Hatch_success = sum(Hatched, na.rm = TRUE) / first(Final_manipulated_clutch),
+  Treatment = first(Treatment), 
+  .groups = "drop")
+
 ggplot(successful_nests, aes(x = Treatment, y = Hatch_success, color = Treatment)) +
   geom_boxplot(outlier.shape = NA, width = 0.5) +  
-  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) + 
-  labs(y = "Hatch rate", x = "Treatment") +
+  geom_jitter(position = position_jitter(width = 0, height = 0), size = 3, alpha = 0.7) + 
+  labs(y = "Hatch success", x = "Treatment") +
   guides(color = FALSE) +
   theme_classic() +
   scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
 
 # Number of swapped (foreign) eggs in nest plot
-ggplot(experiment_data, aes(x = Treatment, y = Foreign_percentage, color = Treatment)) +
+successful_nests_2 <- experiment_data_2 %>% filter(Hatch_success >0)
+ggplot(successful_nests_2, aes(x = Treatment, y = Foreign_percentage, color = Treatment)) +
   geom_boxplot(outlier.shape = NA, width = 0.5) +  
-  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) +  
+  geom_jitter(position = position_jitter(width = 0.0, height = 0), size = 3, alpha = 0.7) +  
   labs(y = "Percentage of foreign eggs in nest", x = "Treatment") +
   guides(color = FALSE) +
   theme_classic() +
   scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
 
 # Clutch size plot
-ggplot(experiment_data, aes(x = Treatment, y = Manipulated_clutch_size, color = Treatment)) +
-  geom_boxplot(outlier.shape = NA) +  
-  geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
+ggplot(experiment_data_2, aes(x = Treatment, y = Manipulated_clutch_size, color = Treatment)) +
+  geom_boxplot(outlier.shape = NA, width = 0.5) +  
+  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) +
   labs(y = "Clutch size", x = "Treatment") +
   guides(color = FALSE) +
   theme_classic() +
@@ -346,19 +379,27 @@ ggplot(experiment_data, aes(x = Treatment, y = as.numeric(Hatch_spread), color =
 
 
 # Modify data frame into longer format
-data_expanded <- experiment_data %>%
+data_expanded <- experiment_data_2 %>%
   mutate(NonSurvivors = Hatched - Survival_60) %>% # Calculate non-survivors
-  select(Nest, Treatment, Survival_60, NonSurvivors) %>%
+  dplyr::select(Nest_ID, Treatment, Survival_60, NonSurvivors) %>%
   pivot_longer(cols = c(Survival_60, NonSurvivors), 
                       names_to = "Status", 
                       values_to = "Count") %>%
   mutate(Survival_60 = ifelse(Status == "Survival_60", 1, 0)) %>%
   uncount(Count) %>%
-  select(Nest, Treatment, Survival_60)
+  dplyr::select(Nest_ID, Treatment, Survival_60)
 View(data_expanded)
+
 
 # Bar plot of survival data
 ggplot(data_expanded, aes(x = Treatment, fill = factor(Survival_60))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Treatment", y = "Count", fill = "Survived") +
+  scale_fill_manual(values = c("1" = "Black", "0" = "Grey")) +
+  theme_classic()
+
+
+ggplot(experiment_data, aes(x = Treatment, fill = factor(Survival_60))) +
   geom_bar(position = "dodge") +
   labs(x = "Treatment", y = "Count", fill = "Survived") +
   scale_fill_manual(values = c("1" = "Black", "0" = "Grey")) +
@@ -393,6 +434,15 @@ print(effect_size)
 sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
                           power = power, alternative = "two.sided")$n
 print(sample_size)
+
+
+
+
+
+
+
+
+
 
 
 # library(glmmTMB)
