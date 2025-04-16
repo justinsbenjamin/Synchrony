@@ -29,21 +29,50 @@ library(glmmTMB)
 # how hatching synchrony affects hatching success and survival.
 
 # Read in data and filtering/data modifications
-masterlist_data <- read_excel("Nests_masterlist.xlsx")
-masterlist_data <- masterlist_data %>% filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
+masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
+  filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>% # Keeping only the good nests
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
+  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>% # assign single/joint female
   filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
-  mutate(
-    Hatch_begin = as.numeric(Hatch_begin),
-    Hatch_end = as.numeric(Hatch_end),
-    Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
-  filter(survive_1 != 0 & survive_1 != "NA") %>%
-  filter(Survived_2 != "NA" & Survived_2 != "2?")
+  mutate(Hatch_begin = as.numeric(Hatch_begin),
+         Hatch_end = as.numeric(Hatch_end),
+         Hatch_spread = Hatch_end - Hatch_begin + 1) # First to last day inclusive
 View(masterlist_data)
+
+Clutch_size <- (masterlist_data$Clutch_size)
+hist(as.numeric(Clutch_size), 
+     xlab = "Clutch size",
+     xlim = c(0, 20),
+     breaks = seq(0,20,1),
+     main = "")
+
+Hatch_spread <- (masterlist_data$Hatch_spread)
+hist(as.numeric(Hatch_spread), 
+     xlab = "Hatch spread (days)",
+     xlim = c(0, 15),
+     breaks = seq(0,15,1),
+     main = "")
+
+ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), as.numeric(Hatch_spread))) +
+  geom_point() +
+  theme_classic()
+
+
+
+
+
+
+
+
+
 
 ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
   geom_point()
+
+
+filter(survive_1 != "NA" & Survived_2 != "NA") 
+
+
 
 masterlist_data <- read_excel("Nests_masterlist.xlsx")
 masterlist_data <- masterlist_data %>% filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>%
