@@ -32,6 +32,7 @@ library(glmmTMB)
 masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>% # Keeping only the good nests
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
+  mutate(Clutch_size = as.numeric(Clutch_size)) %>%
   mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>% # assign single/joint female
   filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
   mutate(Hatch_begin = as.numeric(Hatch_begin),
@@ -53,14 +54,54 @@ hist(as.numeric(Hatch_spread),
      breaks = seq(0,15,1),
      main = "")
 
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), as.numeric(Hatch_spread))) +
+ggplot(masterlist_data, aes(x = as.numeric(Clutch_size), y = as.numeric(Hatch_spread), colour = Females)) +
+  geom_point() +
+  theme_classic()
+
+
+df <- masterlist_data %>%
+  filter(!is.na(as.numeric(Survived_2))) %>%
+  group_by(Hatched_eggs, Survived_2) %>%
+  summarise(count = n(), .groups = "drop")
+View(df)
+
+ggplot(df, aes(x = Hatched_eggs, y = Survived_2, size = factor(count))) +
+  geom_point(alpha = 0.6) +
+  scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "5" = 6, "7" = 7, "11" = 11)) + 
+  theme_classic() +
+  labs(y = "Survived", x = "Hatched eggs") 
+
+ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), as.numeric(Survived_2))) +
   geom_point() +
   theme_classic()
 
 
 
 
+df <- masterlist_data %>%
+  filter(!is.na(as.numeric(Survived_2))) %>%
+  group_by(Hatch_spread, Survived_2) %>%
+  summarise(count = n(), .groups = "drop")
+View(df)
 
+ggplot(df, aes(x = Hatch_spread, y = Survived_2, size = factor(count))) +
+  geom_point(alpha = 0.6) +
+  scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "6" = 6, "13" = 10)) + 
+  theme_classic() +
+  labs(y = "Survived", x = "Hatch spread (days)") 
+
+
+df <- masterlist_data %>%
+  filter(!is.na(as.numeric(Survived_2))) %>%
+  group_by(Hatched_eggs, Survived_2) %>%
+  summarise(count = n(), .groups = "drop")
+View(df)
+
+ggplot(df, aes(x = Hatched_eggs, y = Survived_2, size = factor(count))) +
+  geom_point(alpha = 0.6) +
+  scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "5" = 6, "7" = 7, "11" = 11)) + 
+  theme_classic() +
+  labs(y = "Survived", x = "Hatched eggs") 
 
 
 
