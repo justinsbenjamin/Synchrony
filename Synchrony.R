@@ -14,6 +14,8 @@ library(ggbeeswarm)
 library(pwr)
 library(rstatix)
 library(glmmTMB)
+library(effsize)
+
 
 ########### CHAPTER 2 ##########
 #### NATURAL SYNCHRONY DATA ####
@@ -334,6 +336,7 @@ tapply(experiment_data$Survival_60, experiment_data$Treatment, summary, na.rm = 
   
 #### POWER ANALYSIS STUFF ####
 
+# Cohen's D power analysis stuff
 cohens_d(Hatch_success ~ Treatment, data = successful_nests)
 cohens_d(Survival_60 ~ Treatment, data = successful_nests)
 
@@ -352,6 +355,34 @@ print(effect_size)
 sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
                           power = power, alternative = "two.sided")$n
 print(sample_size)
+
+
+
+# Hedge's G power analysis stuff
+
+SynchHatch <- experiment_data$Hatch_success[experiment_data$Treatment == "Synchronous"]
+AsynchHatch <- experiment_data$Hatch_success[experiment_data$Treatment == "Asynchronous"]
+
+hedges_g <- cohen.d(SynchHatch, AsynchHatch, hedges.correction = TRUE)
+print(hedges_g)
+
+# Setting the parameters
+sample_size <- 15    # Sample size
+alpha <- 0.05        # Significance level
+power <- 0.8         # Power
+effect_size <- 0.3385184   # Effect size  
+
+# Solve for effect size needed
+effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, 
+                          power = power, alternative = "two.sided")$h
+print(effect_size)
+
+# Solve for sample size needed
+sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
+                          power = power, alternative = "two.sided")$n
+print(sample_size)
+
+
 
 
 #### GLMM STUFF ####
