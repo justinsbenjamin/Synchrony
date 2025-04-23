@@ -336,6 +336,8 @@ data_long_format %>%
 t.test(Hatch_success ~ Treatment, data = successful_nests)
 t.test(Foreign_percentage ~ Treatment, data = successful_nests)
 t.test(Manipulated_clutch_size ~ Treatment, data = successful_nests)
+t.test(Observed_incubation_period ~ Treatment, data = successful_nests)
+t.test(Transfered_time ~ Treatment, data = successful_nests)
 
 tapply(experiment_data$Hatch_success, experiment_data$Treatment, summary, na.rm = TRUE)
 tapply(experiment_data$Survival_60, experiment_data$Treatment, summary, na.rm = TRUE)
