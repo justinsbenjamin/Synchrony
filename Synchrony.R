@@ -39,7 +39,9 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
   mutate(Hatch_begin = as.numeric(Hatch_begin),
          Hatch_end = as.numeric(Hatch_end),
-         Hatch_spread = Hatch_end - Hatch_begin + 1) # First to last day inclusive
+         Hatch_spread = Hatch_end - Hatch_begin + 1) %>% # First to last day inclusive
+  mutate(Hatch_begin = as.numeric(Hatch_begin), Date_found = as.numeric(Date_found), 
+       Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) 
 View(masterlist_data)
 
 Clutch_size <- (masterlist_data$Clutch_size)
@@ -260,7 +262,11 @@ experiment_data <- read_excel("Compiled_synchrony_experiment_data.xlsx")  %>%
   ungroup() 
 
 # Hatch success plot
-successful_nests <- experiment_data %>% filter(Hatch_success >0) 
+successful_nests <- experiment_data %>% filter(Hatch_success >0) %>%
+  mutate(Hatch_begin = as.Date(Hatch_begin), Date_found = as.Date(Date_found), 
+         Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
+  mutate(Hatch_begin = as.Date(Hatch_begin), Date_transfer = as.Date(Date_transfer),
+    Transfered_time = as.numeric(Hatch_begin - Date_transfer))
 
 ggplot(successful_nests, aes(x = Treatment, y = Hatch_success, colour = Treatment)) +
   geom_boxplot(outlier.shape = NA, width = 0.5) +  
@@ -381,6 +387,16 @@ print(effect_size)
 sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
                           power = power, alternative = "two.sided")$n
 print(sample_size)
+
+
+
+
+
+
+
+
+
+
 
 
 
