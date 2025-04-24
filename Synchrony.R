@@ -15,6 +15,7 @@ library(pwr)
 library(rstatix)
 library(glmmTMB)
 library(effsize)
+library(DHARMa)
 
 
 ########### CHAPTER 2 ##########
@@ -41,7 +42,8 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
          Hatch_end = as.numeric(Hatch_end),
          Hatch_spread = Hatch_end - Hatch_begin + 1) %>% # First to last day inclusive
   mutate(Hatch_begin = as.numeric(Hatch_begin), Date_found = as.numeric(Date_found), 
-       Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) 
+       Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
+  mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size))
 View(masterlist_data)
 
 Clutch_size <- (masterlist_data$Clutch_size)
@@ -61,6 +63,13 @@ hist(as.numeric(Hatch_spread),
 ggplot(masterlist_data, aes(x = as.numeric(Clutch_size), y = as.numeric(Hatch_spread), colour = Females)) +
   geom_point() +
   theme_classic()
+
+
+ggplot(masterlist_data, aes(x = as.numeric(Clutch_size), 
+                            y = as.numeric(Hatch_success), colour = Females)) +
+  geom_point() +
+  theme_classic()
+
 
 
 df <- masterlist_data %>%
@@ -306,13 +315,11 @@ ggplot(successful_nests, aes(x = Treatment, y = as.numeric(Estimated_hatch_sprea
 # Survival to 60 days
 data_long_format <- successful_nests %>%
   mutate(NonSurvivors = Hatched - Survival_60) %>% # Calculate non-survivors
-  dplyr::select(Nest_ID, Treatment, Survival_60, NonSurvivors) %>%
   pivot_longer(cols = c(Survival_60, NonSurvivors), 
                names_to = "Status", 
                values_to = "Count") %>%
   mutate(Survival_60 = ifelse(Status == "Survival_60", 1, 0)) %>%
   uncount(Count) %>%
-  dplyr::select(Nest_ID, Treatment, Survival_60) %>%
   mutate(Treatment_survival = paste(Treatment, Survival_60, sep = "_"))
 View(data_long_format)
 
@@ -404,10 +411,17 @@ print(sample_size)
 
 
 #### GLMM STUFF ####
-glmmTMB(Survival_60 ~ Treatment  + Manipulated_clutch_size +
-                      (1 | Year/Nest), family = binomial, data = data_long_format)
+model_1 <- glmmTMB(Survival_60 ~ Treatment + Manipulated_clutch_size +
+                      (1|Year), family = binomial, data = data_long_format)
+check_model(model_1)
 
-# library(MuMIn)  # For model selection and AIC ranking
+model_2 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
+                     (1|Year), family = binomial, data = data_long_format)
+check_model(model_2)
+
+model_3 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
+                  (1|Year), family = binomial, data = data_long_format)
+check_model(model_2)
 
 
 # model_full <- glmmTMB(Survival_60 ~ (Treatment + Hatch_spread + Manipulated_clutch_size + 
