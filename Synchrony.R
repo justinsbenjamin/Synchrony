@@ -275,7 +275,9 @@ successful_nests <- experiment_data %>% filter(Hatch_success >0) %>%
   mutate(Hatch_begin = as.Date(Hatch_begin), Date_found = as.Date(Date_found), 
          Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
   mutate(Hatch_begin = as.Date(Hatch_begin), Date_transfer = as.Date(Date_transfer),
-    Transfered_time = as.numeric(Hatch_begin - Date_transfer))
+    Transfered_time = as.numeric(Hatch_begin - Date_transfer)) %>%
+  mutate(Estimated_hatch_spread = as.numeric(Estimated_hatch_spread)) %>%
+  mutate(True_hatch_spread = as.numeric(True_hatch_spread))
 
 ggplot(successful_nests, aes(x = Treatment, y = Hatch_success, colour = Treatment)) +
   geom_boxplot(outlier.shape = NA, width = 0.5) +  
@@ -335,9 +337,29 @@ ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival))) 
                     guide = "none") +
   theme_classic()
 
-data_long_format %>%
-  group_by(Treatment, Survival_60) %>%
-  summarise(Count = n(), .groups = "drop")
+
+
+# Summary numbers of sample size, min, max, mean, SD, and SE for variables. 
+df_long <- successful_nests %>%
+  pivot_longer(
+    cols = where(is.numeric) & !all_of("Year"),
+    names_to = "Variable",
+    values_to = "Value")
+
+df_summary <- df_long %>%
+  group_by(Treatment, Variable) %>%
+  summarise(
+    n = n(),
+    min = min(Value, na.rm = TRUE),
+    max = max(Value, na.rm = TRUE),
+    mean = mean(Value, na.rm = TRUE),
+    sd = sd(Value, na.rm = TRUE),
+    se = sd / sqrt(n),
+    .groups = "drop")
+print(df_summary, n = 30)
+
+
+
 
 #### T-TEST STUFF ####
 t.test(Hatch_success ~ Treatment, data = successful_nests)
@@ -345,9 +367,9 @@ t.test(Foreign_percentage ~ Treatment, data = successful_nests)
 t.test(Manipulated_clutch_size ~ Treatment, data = successful_nests)
 t.test(Observed_incubation_period ~ Treatment, data = successful_nests)
 t.test(Transfered_time ~ Treatment, data = successful_nests)
+t.test(True_hatch_spread ~ Treatment, data = successful_nests)
 
-tapply(experiment_data$Hatch_success, experiment_data$Treatment, summary, na.rm = TRUE)
-tapply(experiment_data$Survival_60, experiment_data$Treatment, summary, na.rm = TRUE)
+
   
 #### POWER ANALYSIS STUFF ####
 
@@ -355,37 +377,17 @@ tapply(experiment_data$Survival_60, experiment_data$Treatment, summary, na.rm = 
 cohens_d(Hatch_success ~ Treatment, data = successful_nests)
 cohens_d(Survival_60 ~ Treatment, data = successful_nests)
 
-# Setting the parameters
-sample_size <- 17    # Sample size
-alpha <- 0.05        # Significance level
-power <- 0.8         # Power
-effect_size <- 0.115   # Effect size  
+SynchHatch <- successful_nests$Hatch_success[successful_nests$Treatment == "Synchronous"]
+AsynchHatch <- successful_nests$Hatch_success[successful_nests$Treatment == "Asynchronous"]
 
-# Solve for effect size needed
-effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, 
-                          power = power, alternative = "two.sided")$h
-print(effect_size)
-
-# Solve for sample size needed
-sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
-                          power = power, alternative = "two.sided")$n
-print(sample_size)
-
-
-
-# Hedge's G power analysis stuff
-
-SynchHatch <- experiment_data$Hatch_success[experiment_data$Treatment == "Synchronous"]
-AsynchHatch <- experiment_data$Hatch_success[experiment_data$Treatment == "Asynchronous"]
-
-hedges_g <- cohen.d(SynchHatch, AsynchHatch, hedges.correction = TRUE)
+hedges_g <- cohen.d(AsynchHatch, SynchHatch, hedges.correction = TRUE)
 print(hedges_g)
 
 # Setting the parameters
-sample_size <- 15    # Sample size
+sample_size <- # Sample size
 alpha <- 0.05        # Significance level
 power <- 0.8         # Power
-effect_size <- 0.3385184   # Effect size  
+effect_size <- -0.3943032 # Hedge's G effect size  
 
 # Solve for effect size needed
 effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, 
@@ -393,69 +395,36 @@ effect_size <- pwr.p.test(n = sample_size, sig.level = alpha,
 print(effect_size)
 
 # Solve for sample size needed
-sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
-                          power = power, alternative = "two.sided")$n
-print(sample_size)
-
-
-
-
-
-
-
-
-
-
-
+g_sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
+                          power = power, alternative = "less")$n
+print(g_sample_size)
 
 
 
 #### GLMM STUFF ####
-model_1 <- glmmTMB(Survival_60 ~ Treatment + Manipulated_clutch_size +
-                      (1|Year), family = binomial, data = data_long_format)
+
+model_1 <- glmmTMB(True_hatch_spread ~ Manipulated_clutch_size + (1|Year),
+                       family = poisson, data = successful_nests)
 check_model(model_1)
 
-model_2 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
-                     (1|Year), family = binomial, data = data_long_format)
+model_2 <- glmmTMB(Survival_60 ~ Treatment + Manipulated_clutch_size +
+                      (1|Year), family = binomial, data = data_long_format)
 check_model(model_2)
 
 model_3 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
+                     (1|Year), family = binomial, data = data_long_format)
+check_model(model_3)
+
+model_4 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
                   (1|Year), family = binomial, data = data_long_format)
-check_model(model_2)
+check_model(model_4)
+
+model_5 <- glmmTMB(Hatch_success ~ Treatment + Manipulated_clutch_size +
+                     (1|Year), family = gaussian, data = data_long_format)
+check_model(model_5)
 
 
-# model_full <- glmmTMB(Survival_60 ~ (Treatment + Hatch_spread + Manipulated_clutch_size + 
-                                   # Foreign_percentage) + 
-                                   # (1 | Year/Nest), 
-                                   # family = binomial, data = experiment_data)
 
-# model_full <- glmmTMB(Survive_60 ~ (Treatment + Estimated_Hatch_Spread + ClutchSize + 
-# GroupSize + ObservationPeriod + ClutchNumber + native_foreign eggs)^2 + 
-# (1 | Year/NestID), 
-# family = binomial, data = df)
-
-# models <- dredge(model_full, rank = "AICc")
-
-# model_list <- list(
-# full = model_full,
-# no_interactions = glmmTMB(Survived ~ NestType + HatchingSpread + ClutchSize + 
-# GroupSize + ClutchNumber + ObservationPeriod (1 | Year/NestID), 
-# family = binomial, data = df),
-# null_model = glmmTMB(Survived ~ (1 | Year/NestID), 
-# family = binomial, data = df))
-
-# model_selection <- model.sel(model_list)
-# print(model_selection)
-
-
-experiment_chick_data <- read.csv("chick_measurements_2018_last_obs.csv")  %>% 
-  filter(Final_age_seen > 20) 
-View(experiment_chick_data)
-
-
-ggplot(experiment_chick_data, aes(x = Hatch_order, y = Final_age_seen, colour = Treatment_Type)) +
-  geom_point() +
-  theme_classic()
 
 
 
