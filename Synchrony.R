@@ -70,6 +70,13 @@ ggplot(masterlist_data, aes(x = as.numeric(Clutch_size),
   geom_point() +
   theme_classic()
 
+ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), 
+                            y = as.numeric(Hatch_success), colour = Females)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  coord_cartesian(ylim = c(0, 1)) +
+  theme_classic()
+
 
 
 df <- masterlist_data %>%
@@ -246,18 +253,32 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
   facet_wrap(~ Females) 
 
 
+ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
+  geom_point()
+
+# Survival data conservative estimate with number of banded juveniles as true number
+
+# Survival data with liberal estimate number of chicks that hatched
+mutate(Survival_60 = Hatched_eggs)
+mutate(Survival_60 = Hatched_eggs)
+
+
+
+
+
+
 
 ########## CHAPTER 3 #########
 #### SYNCHRONY EXPERIMENT ####
 ##############################
 
-
-# 
 # I hypothesize that jointly laying synchronously with a close relative increases
 # the inclusive fitness of the dominant female compared to hypothetical 
 # prolonged laying by a single female.
 
 # Read in data and filtering/data modifications
+# Nests 2018_E, 2018_AD, 2018_AZ, 2018_BD were not manipulated and thus excluded. 
+# Nest 2024_W predated during hatching, also excluded. 
 experiment_data <- read_excel("Compiled_synchrony_experiment_data.xlsx")  %>%
   mutate(Nest_ID = paste(Year, Nest, sep = "_")) %>%
   group_by(Nest_ID, Final_manipulated_clutch) %>%
@@ -270,7 +291,7 @@ experiment_data <- read_excel("Compiled_synchrony_experiment_data.xlsx")  %>%
                             "Asynch" = "Asynchronous")) %>%
   ungroup() 
 
-# Hatch success plot
+# Further cleaning up the data set with successful nests
 successful_nests <- experiment_data %>% filter(Hatch_success >0) %>%
   mutate(Hatch_begin = as.Date(Hatch_begin), Date_found = as.Date(Date_found), 
          Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
@@ -279,73 +300,14 @@ successful_nests <- experiment_data %>% filter(Hatch_success >0) %>%
   mutate(Estimated_hatch_spread = as.numeric(Estimated_hatch_spread)) %>%
   mutate(True_hatch_spread = as.numeric(True_hatch_spread))
 
-ggplot(successful_nests, aes(x = Treatment, y = Hatch_success, colour = Treatment)) +
-  geom_boxplot(outlier.shape = NA, width = 0.5) +  
-  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) + 
-  labs(y = "Hatch success", x = "Treatment") +
-  guides(color = FALSE) +
-  theme_classic() +
-  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
-
-# Number of swapped (foreign) eggs in nest plot
-ggplot(successful_nests, aes(x = Treatment, y = Foreign_percentage, colour = Treatment)) +
-  geom_boxplot(outlier.shape = NA, width = 0.5) +  
-  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) +  
-  labs(y = "% of foreign eggs in nest", x = "Treatment") +
-  guides(color = FALSE) +
-  theme_classic() +
-  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
-
-# Clutch size plot
-ggplot(successful_nests, aes(x = Treatment, y = Manipulated_clutch_size, color = Treatment)) +
-  geom_boxplot(outlier.shape = NA, width = 0.5) +  
-  geom_jitter(position = position_jitter(width = 0.05, height = 0), size = 3, alpha = 0.7) +
-  labs(y = "Clutch size", x = "Treatment") +
-  guides(color = FALSE) +
-  theme_classic() +
-  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
-
-# Estimated hatch spread plot
-ggplot(successful_nests, aes(x = Treatment, y = as.numeric(Estimated_hatch_spread), colour = Treatment)) +
-  geom_boxplot(outlier.shape = NA) +  
-  geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
-  labs(y = "Estimated hatch spread (days)", x = "Treatment") +
-  guides(color = FALSE) +
-  theme_classic() +
-  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
-
-# Survival to 60 days
-data_long_format <- successful_nests %>%
-  mutate(NonSurvivors = Hatched - Survival_60) %>% # Calculate non-survivors
-  pivot_longer(cols = c(Survival_60, NonSurvivors), 
-               names_to = "Status", 
-               values_to = "Count") %>%
-  mutate(Survival_60 = ifelse(Status == "Survival_60", 1, 0)) %>%
-  uncount(Count) %>%
-  mutate(Treatment_survival = paste(Treatment, Survival_60, sep = "_"))
-View(data_long_format)
-
-data_long_format %>%
-  group_by(Treatment, Survival_60) %>%
-  summarise(Count = n(), .groups = "drop")
-
-ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival))) +
-  geom_bar(position = "dodge") +
-  labs(x = "Treatment", y = "Count", fill = "Survived") +
-  scale_fill_manual(values = c("Asynchronous_1" = "darkblue", "Asynchronous_0" = "blue", 
-                               "Synchronous_1" = "firebrick4", "Synchronous_0" = "firebrick1"), 
-                    guide = "none") +
-  theme_classic()
-
-
-
-# Summary numbers of sample size, min, max, mean, SD, and SE for variables. 
+# Nest data in pivoted longer format for faceted figure and summary stats.
 df_long <- successful_nests %>%
   pivot_longer(
     cols = where(is.numeric) & !all_of("Year"),
     names_to = "Variable",
     values_to = "Value")
 
+# Summary numbers of sample size, min, max, mean, SD, and SE for variables.
 df_summary <- df_long %>%
   group_by(Treatment, Variable) %>%
   summarise(
@@ -358,10 +320,52 @@ df_summary <- df_long %>%
     .groups = "drop")
 print(df_summary, n = 30)
 
+# Faceted figure with all numeric things. Can filter it down in the df_long_filtered
+# data set to only do a handful of panels. 
+df_long_filtered <- subset(df_long, Variable != "Number_transfers")
 
+ggplot(df_long_filtered, aes(x = Treatment, y = as.numeric(Value), colour = Treatment)) +
+  geom_boxplot(outlier.shape = NA) +  
+  geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
+  facet_wrap(~Variable, scales="free_y") +
+  guides(color = FALSE) +
+  theme_classic() +
+  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2")) +
+  labs(x = NULL, y = NULL) 
 
+# Example template for doing a single panel instead of facet wrapping them together. 
+ggplot(successful_nests, aes(x = Treatment, y = as.numeric(Estimated_hatch_spread), colour = Treatment)) +
+  geom_boxplot(outlier.shape = NA) +  
+  geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
+  labs(y = "Estimated hatch spread (days)", x = "Treatment") +
+  guides(color = FALSE) +
+  theme_classic() +
+  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2"))
 
-#### T-TEST STUFF ####
+# Survival to 60 days in pivoted longer format for binomial stuff and figure.
+data_long_format <- successful_nests %>%
+  mutate(NonSurvivors = Hatched - Survival_60) %>% # Calculate non-survivors
+  pivot_longer(cols = c(Survival_60, NonSurvivors), 
+               names_to = "Status", 
+               values_to = "Count") %>%
+  mutate(Survival_60 = ifelse(Status == "Survival_60", 1, 0)) %>%
+  uncount(Count) %>%
+  mutate(Treatment_survival = paste(Treatment, Survival_60, sep = "_")) %>%
+
+# Barplot of survival data.
+ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival))) +
+  geom_bar(position = "dodge") +
+  labs(x = "Treatment", y = "Count", fill = "Survived") +
+  scale_fill_manual(values = c("Asynchronous_1" = "darkblue", "Asynchronous_0" = "blue", 
+                               "Synchronous_1" = "firebrick4", "Synchronous_0" = "firebrick1"), 
+                    guide = "none") +
+  theme_classic()
+
+data_long_format %>%
+  group_by(Treatment, Survival_60) %>%
+  summarise(Count = n(), .groups = "drop")
+
+# T-TEST STUFF 
 t.test(Hatch_success ~ Treatment, data = successful_nests)
 t.test(Foreign_percentage ~ Treatment, data = successful_nests)
 t.test(Manipulated_clutch_size ~ Treatment, data = successful_nests)
@@ -369,27 +373,28 @@ t.test(Observed_incubation_period ~ Treatment, data = successful_nests)
 t.test(Transfered_time ~ Treatment, data = successful_nests)
 t.test(True_hatch_spread ~ Treatment, data = successful_nests)
 
+# POWER ANALYSIS STUFF
 
-  
-#### POWER ANALYSIS STUFF ####
-
-# Cohen's D power analysis stuff
+# Cohen's D effect size calculation
 cohens_d(Hatch_success ~ Treatment, data = successful_nests)
 cohens_d(Survival_60 ~ Treatment, data = successful_nests)
 
+# Hedge's G effect size calculation
+# This is better for my small sample size
 SynchHatch <- successful_nests$Hatch_success[successful_nests$Treatment == "Synchronous"]
 AsynchHatch <- successful_nests$Hatch_success[successful_nests$Treatment == "Asynchronous"]
 
 hedges_g <- cohen.d(AsynchHatch, SynchHatch, hedges.correction = TRUE)
 print(hedges_g)
 
-# Setting the parameters
-sample_size <- # Sample size
-alpha <- 0.05        # Significance level
-power <- 0.8         # Power
-effect_size <- -0.3943032 # Hedge's G effect size  
+# Setting the parameters for power analysis
+sample_size <-            # Sample size
+alpha <- 0.05             # Significance level
+power <- 0.8              # Power
+effect_size <- hedges_g # Hedge's G effect size  
 
 # Solve for effect size needed
+## Figure out 2 side or one sided analysis ##
 effect_size <- pwr.p.test(n = sample_size, sig.level = alpha, 
                           power = power, alternative = "two.sided")$h
 print(effect_size)
@@ -400,8 +405,7 @@ g_sample_size <- pwr.p.test(h = effect_size, sig.level = alpha,
 print(g_sample_size)
 
 
-
-#### GLMM STUFF ####
+# GLMM STUFF
 
 model_1 <- glmmTMB(True_hatch_spread ~ Manipulated_clutch_size + (1|Year),
                        family = poisson, data = successful_nests)
@@ -426,11 +430,7 @@ check_model(model_5)
 
 
 
-
-
-
-
-
+# Figures made for GRD, not sure I'll need these again. 
 # Read in data files
 nest_data <- read_excel("GRD_data_2025.xlsx")
 chick_data <- read_excel("Chick_GRD_2025.xlsx")
@@ -470,7 +470,6 @@ chick_data_filtered <- chick_data %>% filter(is.na(Exclusion) | Exclusion == "")
   ))
 View(chick_data_filtered)
 
-
 single_female <- chick_data_filtered %>% 
   filter(Females == "Single Female")
 summary(single_female)
@@ -478,7 +477,6 @@ summary(single_female)
 joint_female <- chick_data_filtered %>% 
   filter(Females == "Joint Females")
 summary(joint_female)
-
 
 # Histogram showing counts of hatching based on relative hatch days
 # separated between single female and joint female nests. 
@@ -492,8 +490,6 @@ ggplot(chick_data_filtered, aes(x = Hatch_day, weight = Hatch_day)) +
   scale_x_continuous(breaks = seq(1, 11, by = 1)) +
   theme_classic() +
   theme(panel.spacing = unit(1, "lines"))
-
-
 
 ###############################
 ##### This is the good figure!!!! ####
@@ -520,8 +516,6 @@ ggplot(data_proportions, aes(x = as.factor(Hatch_day), y = Hatch_proportion, gro
         plot.title = element_text(hjust = 0.5, size = 14)) +
   facet_wrap(~ Females, scales = "free_x")
 
-
-
 experiment_data <- read_excel("Synchrony_experiment_GRD.xlsx")
 View(experiment_data)
 
@@ -530,7 +524,6 @@ ggplot(experiment_data, aes(x = Treatment_Type, fill = factor(first_sur))) +
   labs(x = "Treatment Type", y = "Count", fill = "Survival") +
   scale_fill_manual(values = c("0" = "Black", "1" = "Grey")) +  
   theme_classic()
-
 
 chick_data_filtered %>% 
   filter(Hatched_eggs > 1) 
@@ -544,188 +537,7 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
 
 
 
-# Make a scatter plot with hatching spread on the x axis and hatching success
-# on the y axis. See if there is any trends 
 
 
 
-# library(glmmTMB)
-# library(MuMIn)  # For model selection and AIC ranking
 
-# model_full <- glmmTMB(Survived ~ (NestType + HatchingSpread + ClutchSize + GroupSize + 
-# ObservationPeriod + ClutchNumber)^2 + 
-# (1 | Year/NestID), 
-# family = binomial, data = df)
-
-# models <- dredge(model_full, rank = "AICc")
-
-# model_list <- list(
-# full = model_full,
-# no_interactions = glmmTMB(Survived ~ NestType + HatchingSpread + ClutchSize + 
-# GroupSize + ClutchNumber + ObservationPeriod (1 | Year/NestID), 
-# family = binomial, data = df),
-# null_model = glmmTMB(Survived ~ (1 | Year/NestID), 
-# family = binomial, data = df))
-
-# model_selection <- model.sel(model_list)
-# print(model_selection)
-
-
-
-#### Weighting nests by hatching synchrony using Shannon entropy and by hatching success. 
-# Score calculated by a weighted hatching synchrony multiplied by hatching
-# success to give new weight for nests combining both factors. Nests with higher
-# synchrony and higher success weighted the highest. 
-
-# 1. Entropy-weighting function
-# alpha: emphasis on synchrony (entropy). Can choose to weight synchrony greater 
-# or less than hatching success. 
-# beta: emphasis on hatching success. Can choose to weight hatching success greater 
-# or less than synchrony. 
-# epsilon: small constant to prevent divide-by-zero
-calculate_synchrony_weights <- function(data, alpha = 1, beta = 1, epsilon = 0.1) {
-  
-  results <- lapply(names(data), function(nest_name) {
-    nest <- nest_data[[nest_name]]
-    hatch_days <- nest$hatch_days
-    eggs_laid <- nest$eggs_laid
-    eggs_hatched <- length(hatch_days)
-    
-    # Hatching success
-    success_rate <- eggs_hatched / eggs_laid
-    
-    # Entropy of hatch days
-    p <- table(hatch_days) / eggs_hatched
-    entropy <- -sum(p * log2(p))
-    
-    # Inversing synchrony weight (lower entropy = higher weight)
-    synchrony_weight <- 1 / (entropy + epsilon)
-    
-    # Final combined weight with adjustable emphasis
-    combined_weight <- (synchrony_weight ^ alpha) * (success_rate ^ beta)
-    
-    return(data.frame(
-      Nest = nest_name,
-      Entropy = round(entropy, 3),
-      SuccessRate = round(success_rate, 3),
-      RawWeight = combined_weight
-    ))
-  }) %>% bind_rows()
-  
-  # Re-scaling weights to between 0 and 1. 
-  results$ScaledWeight <- round(results$RawWeight / max(results$RawWeight), 3)
-  return(results)
-}
-
-
-# Example data
-nests <- list(
-  A = list(hatch_days = c(1,1,1,1,1), clutch_size = 5),
-  B = list(hatch_days = c(1,1,1,1,2), clutch_size = 8),
-  C = list(hatch_days = c(1,1,2,3), clutch_size = 6),
-  D = list(hatch_days = c(1,2,4), clutch_size = 5),
-  E = list(hatch_days = c(1,2,3,4,5), clutch_size = 5),
-  F = list(hatch_days = c(1,1,1,2), clutch_size = 5),
-  G = list(hatch_days = c(1,1,1,1,2,2,2), clutch_size = 8),
-  H = list(hatch_days = c(1,1,2,2), clutch_size = 6),
-  I = list(hatch_days = c(1,1,3), clutch_size = 4),
-  J = list(hatch_days = c(1,1,2,4,5), clutch_size = 7)  
-)
-
-
-# Calculating Shannon entropy function
-calculate_entropy <- function(hatch_days) {
-  if (length(hatch_days) == 0) return(NA_real_) # No chicks hatched
-  p <- table(hatch_days) / length(hatch_days)
-  if (length(p) == 1) return(0)  # All on same day = perfect synchrony
-  return(-sum(p * log2(p)))
-}
-
-# Main function 
-calculate_synchrony_weights <- function(nest_data, alpha = 1, beta = 1, epsilon = 0.1) {
-  results <- lapply(names(nest_data), function(nest_name) {
-    nest <- nest_data[[nest_name]]
-    hatch_days <- nest$hatch_days
-    clutch_size <- nest$clutch_size
-    eggs_hatched <- length(hatch_days)
-    
-    # Bad nests get skipped
-    if (clutch_size == 0 || eggs_hatched == 0) return(NULL)
-    
-    hatch_success <- eggs_hatched/clutch_size
-    entropy <- calculate_entropy(hatch_days)
-    if (is.na(entropy)) return(NULL)  # just in case
-    
-    synchrony_weight <- 1 / (entropy + epsilon)
-    combined_weight <- (synchrony_weight ^ alpha) * (hatch_success ^ beta)
-    
-    data.frame(
-      Nest = nest_name,
-      Entropy = round(entropy, 3),
-      Hatch_success = round(hatch_success, 3),
-      RawWeight = combined_weight
-    )
-  }) %>% bind_rows()
-  
-  # Re-scale weights between 0 and 1
-  results$ScaledWeight <- round(results$RawWeight / max(results$RawWeight), 3)
-  return(results)
-}
-
-# Printed results by nest in alphabetical order
-weights <- calculate_synchrony_weights(nests)
-print(weights)
-
-# Printed results by nest in order of weights highest to lowest
-weights <- calculate_synchrony_weights(nests, alpha = 1, beta = 1, epsilon = 0.1) %>%
-  arrange(desc(ScaledWeight))
-print(weights)
-####
-
-################################
-############CHAPTER 2 ##########
-#### NATURAL SYNCHRONY DATA ####
-################################
-
-masterlist_data <- read_excel("Nests_masterlist.xlsx")
-masterlist_data <- masterlist_data %>% filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
-  filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
-  mutate(
-    Hatch_begin = as.numeric(Hatch_begin),
-    Hatch_end = as.numeric(Hatch_end),
-    Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
-  filter(survive_1 != 0 & survive_1 != "NA") %>%
-  filter(Survived_2 != "NA" & Survived_2 != "2?")
-View(masterlist_data)
-
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
-  geom_point()
-
-
-
-masterlist_data <- read_excel("Nests_masterlist.xlsx")
-masterlist_data <- masterlist_data %>% filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
-  mutate(
-    Hatch_begin = as.numeric(Hatch_begin),
-    Hatch_end = as.numeric(Hatch_end),
-    Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
-  filter(survive_1 != 0 & survive_1 != "NA") %>%
-  filter(Survived_2 != "NA" & Survived_2 != "2?")
-View(masterlist_data)
-
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
-  geom_point()
-
-
-
-# Survival data conservative estimate with number of banded juveniles as true number
-
-
-
-# Survival data with liberal estimate number of chicks that hatched
-mutate(Survival_60 = Hatched_eggs)
-mutate(Survival_60 = Hatched_eggs)
