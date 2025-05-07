@@ -60,8 +60,28 @@ hist(as.numeric(Hatch_spread),
      breaks = seq(0,15,1),
      main = "")
 
-ggplot(masterlist_data, aes(x = as.numeric(Clutch_size), y = as.numeric(Hatch_spread), colour = Females)) +
+
+model <- lm(Hatch_spread ~ Hatched_eggs, data = masterlist_data)
+
+# Get residuals: asynchrony relative to expected span for brood size
+masterlist_data$hatching_asynchrony <- resid(model)
+masterlist_data <- masterlist_data %>%
+  filter(Clutch_size => 5)
+
+hist(masterlist_data$hatching_asynchrony)
+
+masterlist_data <- masterlist_data %>%
+  filter(Hatched_eggs > 1)
+ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Hatch_spread), colour = Females)) +
   geom_point() +
+  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
+  theme_classic()
+
+
+ggplot(masterlist_data, aes(x = as.numeric(hatching_asynchrony), y = as.numeric(Survived_2), colour = Females)) +
+  geom_point() +
+  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
+  scale_x_continuous(limits = c(-3, 3)) +
   theme_classic()
 
 
@@ -70,11 +90,13 @@ ggplot(masterlist_data, aes(x = as.numeric(Clutch_size),
   geom_point() +
   theme_classic()
 
+masterlist_data <- masterlist_data %>%
+  filter(Hatched_eggs >1) 
+  
 ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), 
                             y = as.numeric(Hatch_success), colour = Females)) +
   geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
-  coord_cartesian(ylim = c(0, 1)) +
+  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
   theme_classic()
 
 
