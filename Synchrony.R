@@ -46,6 +46,18 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size))
 View(masterlist_data)
 
+
+# Get residuals: asynchrony relative to expected span for brood size
+Hatch_success <- masterlist_data %>%
+  filter(Hatch_success != "NA")
+model <- lm(Hatch_success ~ Clutch_size, data = Hatch_success)
+Hatch_success$ha_resid <- resid(model)
+
+hist(Hatch_success$ha_resid, breaks = 20)
+
+
+
+
 Clutch_size <- (masterlist_data$Clutch_size)
 hist(as.numeric(Clutch_size), 
      xlab = "Clutch size",
