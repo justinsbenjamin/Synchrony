@@ -31,13 +31,13 @@ library(DHARMa)
 # have impacts on hatching synchrony and reproductive success. And also looking
 # how hatching synchrony affects hatching success and survival.
 
-# Read in data and filtering/data modifications
+# Primary filtering/data modifications of the masterlist data set. 
 masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>% # Keeping only the good nests
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
   mutate(Clutch_size = as.numeric(Clutch_size)) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>% # assign single/joint female
   filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
+  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>% # assign single/joint female
   mutate(Hatch_begin = as.numeric(Hatch_begin),
          Hatch_end = as.numeric(Hatch_end),
          Hatch_spread = Hatch_end - Hatch_begin + 1) %>% # First to last day inclusive
@@ -46,42 +46,33 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size))
 View(masterlist_data)
 
+# Check differences in joint vs singe female nests
+masterlist_data %>% count(Females, sort=TRUE)
+
+# Filtering of data for only failed nests 
+masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
+  filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>% # Keeping only the good nests
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
+  filter(Hatch_begin == "NA" & Hatch_end == "NA") %>%
+  mutate(Clutch_size = as.numeric(Clutch_size)) %>%
+  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females"))  # assign single/joint female
+View(masterlist_data)
+
+# Check difference in joint vs single female nests
+masterlist_data %>% count(Females, sort=TRUE)
+
 
 # Get residuals: asynchrony relative to expected span for brood size
-Hatch_success <- masterlist_data %>%
-  filter(Hatch_success != "NA")
-model <- lm(Hatch_success ~ Clutch_size, data = Hatch_success)
-Hatch_success$ha_resid <- resid(model)
-
-hist(Hatch_success$ha_resid, breaks = 20)
-
-
-
-
-Clutch_size <- (masterlist_data$Clutch_size)
-hist(as.numeric(Clutch_size), 
-     xlab = "Clutch size",
-     xlim = c(0, 20),
-     breaks = seq(0,20,1),
-     main = "")
-
-Hatch_spread <- (masterlist_data$Hatch_spread)
-hist(as.numeric(Hatch_spread), 
-     xlab = "Hatch spread (days)",
-     xlim = c(0, 15),
-     breaks = seq(0,15,1),
-     main = "")
-
-
+# Doesn't follow assumptions of all nests incubated before or after 
+# egg laying period is done though.Needs some touch ups still. 
 model <- lm(Hatch_spread ~ Hatched_eggs, data = masterlist_data)
-
-# Get residuals: asynchrony relative to expected span for brood size
 masterlist_data$hatching_asynchrony <- resid(model)
-masterlist_data <- masterlist_data %>%
-  filter(Clutch_size => 5)
-
+masterlist_data <- masterlist_data 
 hist(masterlist_data$hatching_asynchrony)
 
+
+# Do pivot longer and combine things like hatch success, observed period.
+# hatched eggs, survival etc. 
 masterlist_data <- masterlist_data %>%
   filter(Hatched_eggs > 1)
 ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Hatch_spread), colour = Females)) +
@@ -90,47 +81,64 @@ ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Hatch_s
   theme_classic()
 
 
-ggplot(masterlist_data, aes(x = as.numeric(hatching_asynchrony), y = as.numeric(Survived_2), colour = Females)) +
-  geom_point() +
-  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
-  scale_x_continuous(limits = c(-3, 3)) +
-  theme_classic()
-
-
-ggplot(masterlist_data, aes(x = as.numeric(Clutch_size), 
-                            y = as.numeric(Hatch_success), colour = Females)) +
-  geom_point() +
-  theme_classic()
-
-masterlist_data <- masterlist_data %>%
-  filter(Hatched_eggs >1) 
-  
+# Hatch rate and hatch spread plot
+# Figure out how to add linear regressions bound by 0 and 1
 ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), 
                             y = as.numeric(Hatch_success), colour = Females)) +
   geom_point() +
   geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
+  labs(y = "Hatch rate", x = "Hatch spread (days)") +
   theme_classic()
 
 
-
+# Survived by hatched eggs.
 df <- masterlist_data %>%
   filter(!is.na(as.numeric(Survived_2))) %>%
   group_by(Hatched_eggs, Survived_2) %>%
   summarise(count = n(), .groups = "drop")
-View(df)
 
 ggplot(df, aes(x = Hatched_eggs, y = Survived_2, size = factor(count))) +
+     geom_point(alpha = 0.6) +
+     scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "5" = 6, "7" = 7, "11" = 11)) + 
+     theme_classic() +
+     labs(y = "Survived", x = "Hatched eggs") 
+
+# Surived by hatched eggs again but jittered points and by female.
+ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Survived_2), colour = Females)) +
   geom_point(alpha = 0.6) +
-  scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "5" = 6, "7" = 7, "11" = 11)) + 
+  geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
   theme_classic() +
-  labs(y = "Survived", x = "Hatched eggs") 
+  labs(y = "Survived", x = "Hatched eggs") +
+  scale_y_continuous(c(0, 5)) +
+  scale_x_continuous(breaks = seq(0, 8, by = 1))
+
+
+# Hatched eggs by hatch spread with jitterpoints and by female
+masterlist_data <- masterlist_data %>%
+  filter(Hatched_eggs != "NA") %>%
+  filter(Hatch_spread != "NA") 
+
+ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), y = as.numeric(Hatched_eggs), colour = Females)) +
+  geom_point(alpha = 0.6) +
+  geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
+  theme_classic() +
+  labs(y = "Hatched eggs", x = "Hatch spread") 
+
+# Hatch survival by hatch spread with jitter points. 
+ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), y = as.numeric(Survived_2), colour = Females)) +
+  geom_point(alpha = 0.6) +
+  geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
+  theme_classic() +
+  labs(y = "Survived", x = "Hatch spread") 
+
+ggplot(masterlist_data, aes(x = Hatch_spread, y = as.numeric(Hatched_eggs))) +
+  geom_point(alpha = 0.6) +
+  theme_classic() +
+  labs(y = "Hatched eggs", x = "Hatch spread") 
 
 ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), as.numeric(Survived_2))) +
   geom_point() +
   theme_classic()
-
-
-
 
 df <- masterlist_data %>%
   filter(!is.na(as.numeric(Survived_2))) %>%
@@ -144,7 +152,6 @@ ggplot(df, aes(x = Hatch_spread, y = Survived_2, size = factor(count))) +
   theme_classic() +
   labs(y = "Survived", x = "Hatch spread (days)") 
 
-
 df <- masterlist_data %>%
   filter(!is.na(as.numeric(Survived_2))) %>%
   group_by(Hatched_eggs, Survived_2) %>%
@@ -158,97 +165,38 @@ ggplot(df, aes(x = Hatched_eggs, y = Survived_2, size = factor(count))) +
   labs(y = "Survived", x = "Hatched eggs") 
 
 
-
-
-
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
-  geom_point()
-
-
-filter(survive_1 != "NA" & Survived_2 != "NA") 
-
-
-
-masterlist_data <- read_excel("Nests_masterlist.xlsx")
-masterlist_data <- masterlist_data %>% filter(Exclusion == "GOOD" | Exclusion == "ABCL") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
+# Survival data with conservative and liberal estimates
+masterlist_data <- masterlist_data %>%
   mutate(
-    Hatch_begin = as.numeric(Hatch_begin),
-    Hatch_end = as.numeric(Hatch_end),
-    Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
-  filter(survive_1 != 0 & survive_1 != "NA") %>%
-  filter(Survived_2 != "NA" & Survived_2 != "2?")
-View(masterlist_data)
+    survival_cons = ifelse(is.na(Survived_2), 0, Survived_2),
+    survival_lib = ifelse(is.na(Survived_2), Hatched_eggs, Survived_2)
+  )
 
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
-  geom_point()
+ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), y = as.numeric(survival_cons), colour = Females)) +
+  geom_point() +
+  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
+  theme_classic()
 
-# Survival data conservative estimate with number of banded juveniles as true number
+ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), y = as.numeric(survival_lib), colour = Females)) +
+  geom_point() +
+  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
+  theme_classic()
 
-# Survival data with liberal estimate number of chicks that hatched
-mutate(Survival_60 = Hatched_eggs)
-mutate(Survival_60 = Hatched_eggs)
+ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), y = as.numeric(Survived_2), colour = Females)) +
+  geom_point() +
+  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
+  theme_classic()
 
-# Read in data files
-nest_data <- read_excel("GRD_data_2025.xlsx")
-chick_data <- read_excel("Chick_GRD_2025.xlsx")
-View(nest_data)
-View(chick_data)
 
-# Filter nests that aren't excluded
-# Create unique nest IDs
-# Add single female and joint female categories
-# Calculate hatch spread
-nest_data_filtered <- nest_data %>% filter(is.na(Exclusion) | Exclusion == "") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
-  filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
-  mutate(
-    Hatch_begin = as.numeric(Hatch_begin),
-    Hatch_end = as.numeric(Hatch_end),
-    Hatch_spread = Hatch_end - Hatch_begin + 1)
-View(nest_data_filtered)
-
-# Filter nests that aren't excluded
 # Create unique nest IDs
 # Merge clutch size and hatched eggs from nest data set to chick data set
-# Add single female and joint female categories
-chick_data_filtered <- chick_data %>% filter(is.na(Exclusion) | Exclusion == "") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  left_join(nest_data_filtered %>% dplyr::select(Nest_ID, Clutch_size, Hatched_eggs, Hatch_spread), by = "Nest_ID") %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
-  filter(!is.na(Females)) %>%
-  mutate(Hatch_rate = Hatched_eggs / Clutch_size) %>%
-  filter(!is.na(Hatch_rate)) %>% # Remove NAs if needed
-  group_by(Nest_ID) %>% 
-  mutate(Synchrony = case_when(
-    Hatch_spread >= 1 & Hatch_spread <= 5 ~ "Synchronous",
-    Hatch_spread >= 6 ~ "Asynchronous",
-    TRUE ~ NA_character_  # Handles missing or unexpected values
-  ))
-View(chick_data_filtered)
 
-single_female <- chick_data_filtered %>% 
-  filter(Females == "Single Female")
-summary(single_female)
+mutate(Synchrony = case_when(
+  Hatch_spread >= 1 & Hatch_spread <= 5 ~ "Synchronous",
+  Hatch_spread >= 6 ~ "Asynchronous",
+  TRUE ~ NA_character_ )) # Handles missing or unexpected values
 
-joint_female <- chick_data_filtered %>% 
-  filter(Females == "Joint Females")
-summary(joint_female)
 
-# Histogram showing counts of hatching based on relative hatch days
-# separated between single female and joint female nests. 
-chick_data_filtered <- chick_data_filtered %>% filter(!is.na(Hatch_day))
-ggplot(chick_data_filtered, aes(x = Hatch_day, weight = Hatch_day)) +
-  geom_histogram(fill = "skyblue", colour = "black", binwidth = 1) +
-  facet_wrap(~ Females, scales = "free_x") +
-  labs(x = "Relative hatching day",
-       y = "Chicks hatched") +
-  scale_y_continuous(breaks = seq(0, 100, by = 10)) +
-  scale_x_continuous(breaks = seq(1, 11, by = 1)) +
-  theme_classic() +
-  theme(panel.spacing = unit(1, "lines"))
 
 ###############################
 ##### This is the good figure!!!! ####
@@ -285,18 +233,6 @@ ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_s
   scale_x_continuous(breaks = seq(1, 11, by = 1)) +
   theme_classic() +
   facet_wrap(~ Females) 
-
-
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = survive_1)) +
-  geom_point()
-
-# Survival data conservative estimate with number of banded juveniles as true number
-
-# Survival data with liberal estimate number of chicks that hatched
-mutate(Survival_60 = Hatched_eggs)
-mutate(Survival_60 = Hatched_eggs)
-
-
 
 
 
@@ -362,7 +298,7 @@ ggplot(df_long_filtered, aes(x = Treatment, y = as.numeric(Value), colour = Trea
   geom_boxplot(outlier.shape = NA) +  
   geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
   facet_wrap(~Variable, scales="free_y") +
-  guides(color = FALSE) +
+  guides(color = "none") +
   theme_classic() +
   scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2")) +
   labs(x = NULL, y = NULL) 
@@ -440,7 +376,6 @@ print(g_sample_size)
 
 
 # GLMM STUFF
-
 model_1 <- glmmTMB(True_hatch_spread ~ Manipulated_clutch_size + (1|Year),
                        family = poisson, data = successful_nests)
 check_model(model_1)
@@ -460,118 +395,5 @@ check_model(model_4)
 model_5 <- glmmTMB(Hatch_success ~ Treatment + Manipulated_clutch_size +
                      (1|Year), family = gaussian, data = data_long_format)
 check_model(model_5)
-
-
-
-
-# Figures made for GRD, not sure I'll need these again. 
-# Read in data files
-nest_data <- read_excel("GRD_data_2025.xlsx")
-chick_data <- read_excel("Chick_GRD_2025.xlsx")
-View(nest_data)
-View(chick_data)
-
-# Filter nests that aren't excluded
-# Create unique nest IDs
-# Add single female and joint female categories
-# Calculate hatch spread
-nest_data_filtered <- nest_data %>% filter(is.na(Exclusion) | Exclusion == "") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
-  filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
-  mutate(
-    Hatch_begin = as.numeric(Hatch_begin),
-    Hatch_end = as.numeric(Hatch_end),
-    Hatch_spread = Hatch_end - Hatch_begin + 1)
-View(nest_data_filtered)
-
-# Filter nests that aren't excluded
-# Create unique nest IDs
-# Merge clutch size and hatched eggs from nest data set to chick data set
-# Add single female and joint female categories
-chick_data_filtered <- chick_data %>% filter(is.na(Exclusion) | Exclusion == "") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  left_join(nest_data_filtered %>% dplyr::select(Nest_ID, Clutch_size, Hatched_eggs, Hatch_spread), by = "Nest_ID") %>%
-  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
-  filter(!is.na(Females)) %>%
-  mutate(Hatch_rate = Hatched_eggs / Clutch_size) %>%
-  filter(!is.na(Hatch_rate)) %>% # Remove NAs if needed
-  group_by(Nest_ID) %>% 
-  mutate(Synchrony = case_when(
-    Hatch_spread >= 1 & Hatch_spread <= 5 ~ "Synchronous",
-    Hatch_spread >= 6 ~ "Asynchronous",
-    TRUE ~ NA_character_  # Handles missing or unexpected values
-  ))
-View(chick_data_filtered)
-
-single_female <- chick_data_filtered %>% 
-  filter(Females == "Single Female")
-summary(single_female)
-
-joint_female <- chick_data_filtered %>% 
-  filter(Females == "Joint Females")
-summary(joint_female)
-
-# Histogram showing counts of hatching based on relative hatch days
-# separated between single female and joint female nests. 
-chick_data_filtered <- chick_data_filtered %>% filter(!is.na(Hatch_day))
-ggplot(chick_data_filtered, aes(x = Hatch_day, weight = Hatch_day)) +
-  geom_histogram(fill = "skyblue", colour = "black", binwidth = 1) +
-  facet_wrap(~ Females, scales = "free_x") +
-  labs(x = "Relative hatching day",
-       y = "Chicks hatched") +
-  scale_y_continuous(breaks = seq(0, 100, by = 10)) +
-  scale_x_continuous(breaks = seq(1, 11, by = 1)) +
-  theme_classic() +
-  theme(panel.spacing = unit(1, "lines"))
-
-###############################
-##### This is the good figure!!!! ####
-###############################
-
-data_proportions <- chick_data_filtered %>%
-  group_by(Nest_ID, Hatch_day) %>%
-  summarise(Chicks_hatched = n(), .groups = "drop") %>%  # Count how many chicks hatched per day
-  left_join(nest_data_filtered %>% dplyr::select(Nest_ID, Hatched_eggs, Females), by = "Nest_ID") %>%
-  mutate(Hatch_proportion = (Chicks_hatched / Hatched_eggs) * 100)  # Compute correct percentage
-
-# Plot violin graph
-ggplot(data_proportions, aes(x = as.factor(Hatch_day), y = Hatch_proportion, group = Nest_ID)) +
-  geom_jitter(position = position_jitter(width = 0.2, height = 0), 
-              size = 1, alpha = 0.8) + 
-  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 100), 
-                     breaks = seq(0, 100, by = 10)) +  
-  labs(x = "Relative hatching day",
-       y = "Percentage of hatched chicks per nest") +
-  theme_classic() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(size = 12),
-        axis.text.y = element_text(size = 12),
-        plot.title = element_text(hjust = 0.5, size = 14)) +
-  facet_wrap(~ Females, scales = "free_x")
-
-experiment_data <- read_excel("Synchrony_experiment_GRD.xlsx")
-View(experiment_data)
-
-ggplot(experiment_data, aes(x = Treatment_Type, fill = factor(first_sur))) +
-  geom_bar(position = "dodge") +
-  labs(x = "Treatment Type", y = "Count", fill = "Survival") +
-  scale_fill_manual(values = c("0" = "Black", "1" = "Grey")) +  
-  theme_classic()
-
-chick_data_filtered %>% 
-  filter(Hatched_eggs > 1) 
-
-ggplot(chick_data_filtered, aes(x = Hatch_spread, y = Hatch_rate, fill = Hatch_spread)) +
-  geom_jitter(width = 0.2, alpha = 0.5) +  # Adds points to show spread
-  labs(x = "Relative Hatch Day", y = "Hatching Success") +
-  scale_x_continuous(breaks = seq(1, 11, by = 1)) +
-  theme_classic() +
-  facet_wrap(~ Females) 
-
-
-
-
-
 
 
