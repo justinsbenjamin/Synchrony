@@ -4,6 +4,7 @@
 # Load libraries
 library(dplyr)
 library(ggplot2)
+library(ggpattern)
 library(effects)
 library(MASS)
 library(performance)
@@ -95,11 +96,6 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
 mean()
 
 
-
-
-
-
-
 glm_fit <- glm(as.numeric(Hatch_spread) ~ as.numeric(Hatched_eggs), family = poisson, data = masterlist_data)
 summary(glm_fit)$dispersion
 overdispersion <- sum(residuals(glm_fit, type = "pearson")^2) / df.residual(glm_fit)
@@ -124,13 +120,6 @@ ggplot(masterlist_data, aes(x = as.numeric(Clutch_size), y = as.numeric(Hatch_sp
   geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
   labs(y = "Hatch spread (days)", x = "Clutch size") +
   theme_classic()
-
-
-
-
-
-
-
 
 
 # Hatch rate and hatch spread plot
@@ -187,9 +176,6 @@ ggplot(df, aes(x = Hatch_spread, y = Hatch_success, colour = Females)) +
   theme_classic()
 
 
-
-
-
 # Plot
 ggplot(df, aes(x = Hatch_spread, y = Hatch_success, colour = Females)) +
   geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
@@ -208,11 +194,6 @@ ggplot(masterlist_data, aes(x = Clutch_size, y = Hatch_success)) +
   geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
   labs(y = "Hatch rate", x = "Clutch size") +
   theme_classic()
-
-
-
-
-
 
 
 
@@ -235,7 +216,6 @@ pred_data <- data.frame(Hatch_spread = seq(min(df$Hatch_spread, na.rm = TRUE),
 pred_data$Hatch_success <- predict(fit, newdata = pred_data, type = "response")
 
 
-
 ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), 
                             y = as.numeric(Hatch_success), colour = Females)) +
   geom_point() +
@@ -244,13 +224,6 @@ ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread),
             color = "black", size = 1.2) +
   labs(y = "Hatch rate", x = "Hatch spread (days)") +
   theme_classic()
-
-
-
-
-
-
-
 
 
 ggplot(masterlist_data, aes(x= as.numeric(Clutch_size),
@@ -348,7 +321,6 @@ geom_point(alpha = 0.6) +
   geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
   theme_classic() +
   labs(y = "Survived", x = "Hatched eggs")
-
 
 
 # Survival data with conservative and liberal estimates
@@ -466,18 +438,6 @@ check_model(model_a)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 masterlist_data$Clutch_size <- as.numeric(masterlist_data$Clutch_size)
 
 
@@ -485,9 +445,6 @@ hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size^2) +
                 (1|Year), family = poisson, data = masterlist_data, 
                 control = glmmTMBControl(rank_check = "adjust"))
 check_model(hatched_eggs)
-
-
-
 
 
 
@@ -511,14 +468,6 @@ model_e <- glmmTMB(Survived_2 ~ Clutch_size + Manipulated_clutch +
                      (1|Year) (1|Clutch_size) + (1|Hatched_eggs) + (1|Females)
                    (1|Hatch_spread), family = binomial, data = )
 check_model(model_e)
-
-
-
-
-
-
-
-
 
 
 
@@ -592,7 +541,7 @@ ggplot(df_long_filtered, aes(x = Treatment, y = as.numeric(Value), colour = Trea
   labs(x = NULL, y = NULL) 
 
 # Example template for doing a single panel instead of facet wrapping them together. 
-ggplot(successful_nests, aes(x = Treatment, y = as.numeric(Estimated_hatch_spread), colour = Treatment)) +
+ggplot(successful_nests_HS, aes(x = Treatment, y = as.numeric(True_hatch_spread), colour = Treatment)) +
   geom_boxplot(outlier.shape = NA) +  
   geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
   labs(y = "Estimated hatch spread (days)", x = "Treatment") +
@@ -617,7 +566,123 @@ ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival))) 
   scale_fill_manual(values = c("Asynchronous_1" = "darkblue", "Asynchronous_0" = "blue", 
                                "Synchronous_1" = "firebrick4", "Synchronous_0" = "firebrick1"), 
                     guide = "none") +
+  theme_classic() 
+
+View(data_long_format)
+
+
+data_long_format$pattern_type <- ifelse(data_long_format$Survival_60 == 0, "stripe", "none")
+ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival))) +
+  geom_bar_pattern(position = "dodge", stat = "count",
+                   pattern_fill = "black",
+                   pattern_angle = 45,
+                   pattern_density = 0.1,
+                   pattern_spacing = 0.05,
+                   pattern = "stripe") +
+  labs(x = "Treatment", y = "Count", fill = "Survival status") +
+  scale_fill_manual(
+    values = c(
+      "Asynchronous_1" = "blue",
+      "Asynchronous_0" = "blue", 
+      "Synchronous_1" = "firebrick1",
+      "Synchronous_0" = "firebrick1"
+    ),
+    # Show one red and one blue example in the legend
+    breaks = c("Asynchronous_1", "Synchronous_0"),
+    labels = c("Survived", "Did not survive"),
+    guide = guide_legend(
+      override.aes = list(
+        fill = c("grey20", "grey")  # one color for each survival status
+      )
+    )
+  ) +
   theme_classic()
+
+
+
+ggplot(data_long_format, aes(x = Treatment, fill = interaction(Treatment, Survival_60))) +
+  geom_bar_pattern(
+    position = "dodge",
+    stat = "count",
+    aes(pattern = pattern_type),
+    pattern_fill = "black",       # color of the lines
+    pattern_angle = 45,           # diagonal
+    pattern_density = 0.1,
+    pattern_spacing = 0.02,
+    pattern_size = 0.3,
+    pattern_key_scale_factor = 0.6
+  ) +
+  scale_fill_manual(
+    values = c(
+      "Asynchronous" = "blue",
+      "Synchronous" = "firebrick1"
+  )) +
+  labs(x = "Treatment", y = "Count", fill = "Group") +
+  theme_classic()
+
+
+
+
+library(ggplot2)
+library(ggpattern)
+
+# Create interaction variable for color and pattern control variable
+data_long_format$group <- as.character(interaction(data_long_format$Treatment, data_long_format$Survival_60))
+data_long_format$pattern_type <- ifelse(data_long_format$Survival_60 == 0, "Did not survive", "Survived")
+
+ggplot(data_long_format, aes(x = Treatment, fill = group, pattern = pattern_type)) +
+  geom_bar_pattern(
+    stat = "count",
+    position = "dodge",
+    pattern_fill = "black",
+    pattern_angle = 45,
+    pattern_density = 0.1,
+    pattern_spacing = 0.01,
+    pattern_size = 0.3) +
+  scale_fill_manual(
+    values = c(
+      "Asynchronous.1" = "blue",
+      "Asynchronous.0" = "blue",
+      "Synchronous.1" = "firebrick1",
+      "Synchronous.0" = "firebrick1")) +
+  theme_classic()
+
+
+
+scale_fill_manual(
+  values = c(
+    "Asynchronous_1" = "darkblue",
+    "Asynchronous_0" = "blue", 
+    "Synchronous_1" = "firebrick4",
+    "Synchronous_0" = "firebrick1"
+  ),
+  # Manually define which items appear in legend
+  breaks = c("Asynchronous_1", "Asynchronous_0"),  # Just 2
+  labels = c("Survived", "Did not survive"),
+  guide = guide_legend(
+    override.aes = list(
+      fill = c("darkblue", "blue")  # Legend colors
+    )
+  )
+)
+
+
+
+
+
+
+
+
+library(ggplot2)
+library(ggpattern)
+
+# Create a pattern variable: stripe for died (0), none for survived (1)
+data_long_format$pattern_type <- ifelse(data_long_format$Treatment_survival == 0, "stripe", "none")
+
+ggplot(data_long_format, aes(x = Treatment, fill = interaction(Treatment, Treatment_survival))) +
+  geom_bar_pattern(
+    position = "dodge")
+
 
 data_long_format %>%
   group_by(Treatment, Survival_60) %>%
@@ -629,6 +694,10 @@ t.test(Foreign_percentage ~ Treatment, data = successful_nests)
 t.test(Manipulated_clutch_size ~ Treatment, data = successful_nests)
 t.test(Observed_incubation_period ~ Treatment, data = successful_nests)
 t.test(Transfered_time ~ Treatment, data = successful_nests)
+
+
+successful_nests_HS <- successful_nests %>%
+  filter(True_hatch_spread >1)
 t.test(True_hatch_spread ~ Treatment, data = successful_nests)
 
 # POWER ANALYSIS STUFF
@@ -663,25 +732,34 @@ g_sample_size <- pwr.p.test(h = effect_size, sig.level = alpha,
 print(g_sample_size)
 
 
-# GLMM STUFF
+
+## GLMM STUFF ##
+
+model_1 <- glmmTMB(Hatched ~ Manipulated_clutch_size + (1|Year),
+                   family = gaussian, data = successful_nests)
+check_model(model_1)
+summary(model_1)
+
+
+
 model_1 <- glmmTMB(True_hatch_spread ~ Manipulated_clutch_size + (1|Year),
                        family = poisson, data = successful_nests)
 check_model(model_1)
+summary(model_1)
 
-model_2 <- glmmTMB(Survival_60 ~ Treatment + Manipulated_clutch_size +
-                      (1|Year), family = binomial, data = data_long_format)
+model_2 <- glmmTMB(Survival_60 ~ Treatment  + (1|Year), family = binomial,
+                   data = data_long_format)
 check_model(model_2)
+summary(model_2)
 
-model_3 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
-                     (1|Year), family = binomial, data = data_long_format)
+model_3 <- glmmTMB(Survival_60 ~ Treatment + Manipulated_clutch_size +
+                      (1|Year), family = binomial, data = data_long_format)
 check_model(model_3)
+summary(model_3)
 
-model_4 <- glmmTMB(Survival_60 ~ Treatment + Hatched +
-                  (1|Year), family = binomial, data = data_long_format)
+model_4 <- glmmTMB(Survival_60 ~ Treatment + Hatched + Manipulated_clutch_size +
+                     (1|Year), family = binomial, data = data_long_format)
 check_model(model_4)
+summary(model_4)
 
-model_5 <- glmmTMB(Hatch_success ~ Treatment + Manipulated_clutch_size +
-                     (1|Year), family = gaussian, data = data_long_format)
-check_model(model_5)
-
-
+anova(model_4, model_3, test = "Chisq")
