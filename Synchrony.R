@@ -55,7 +55,7 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
   mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size)) %>%
-  mutate(survival_cons = ifelse(is.na(Survived_2), 0, Survived_2)) 
+  mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2)) 
 # 2 estimates of survival, one where NAs are 0 survived and another of just 
 # removing the NAs. 
 View(masterlist_data)
