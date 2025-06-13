@@ -60,8 +60,6 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
 # removing the NAs. 
 View(masterlist_data)
 
-
-
 # Do pivot longer and combine things like hatch success, observed period.
 # hatched eggs, survival etc. 
 
