@@ -54,6 +54,7 @@ print(nest_counts)
 masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
+  select(-`...22`, -`...23`, -`...24`) %>%
   mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size)) %>%
   mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2)) 
 # 2 estimates of survival, one where NAs are 0 survived and another of just 
@@ -67,18 +68,28 @@ View(masterlist_data)
 
 
 #### HYPOTHESIS 1 ####
+# Dominant females lay synchronously with another female to increase 
+# their inclusive fitness. 
 
-# Data organization to include hatching periods
-masterlist_data <- masterlist_data %>%
-  filter(Hatch_begin != "NA" & Hatch_end != "NA") %>%
+masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
+  filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
+  select(-`...22`, -`...23`, -`...24`) %>%
+  mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size)) %>%
+  mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2)) %>%
   mutate(Hatch_begin = as.numeric(Hatch_begin),
          Hatch_end = as.numeric(Hatch_end),
-         Hatch_spread = Hatch_end - Hatch_begin + 1) 
-
+         Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
 mutate(Hatch_begin = as.numeric(Hatch_begin), Date_found = as.numeric(Date_found), 
        Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
-
+  mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
+                  Hatch_begin, Hatch_end, Hatch_spread, Year), ~ as.numeric(as.character(.)))) %>%
+  pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
+                        'Survived_2', 'Survived_2_cons'), 
+               names_to = 'Data', 
+               values_to = 'Value')
 View(masterlist_data)
+
 
 #### PREDICTION 1a: Shorter hatching spread (HS) have better survival ####
 
@@ -90,20 +101,37 @@ model_a <- glmmTMB(as.numeric(Hatched_eggs) ~ as.numeric(Clutch_size) + as.numer
 check_model(model_a)
 summary(model_a)
 
-
-masterlist_data$Clutch_size <- as.numeric(as.character(masterlist_data$Clutch_size))
-masterlist_data$Hatched_eggs <- as.numeric(as.character(masterlist_data$Hatched_eggs))
-
-model_e <- glmmTMB(Survived_2 ~ Hatch_spread + (1|Year) + (1|Clutch_size) + 
-                   ,family = binomial, data = )
+# conservative survival estimate
+model_e <- glmmTMB(Survived_2_cons ~ Hatch_spread + (1|Year) 
+                   ,family = poisson(link = log), data = masterlist_data)
 check_model(model_e)
-summary(model_d)
+summary(model_e)
 
-ggplot(masterlist_data, aes(x = as.numeric(Hatch_spread), y = as.numeric(Hatched_eggs), colour = Females)) +
-  geom_point(alpha = 0.6) +
-  geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
-  theme_classic() +
-  labs(y = "Hatched eggs", x = "Hatch spread") 
+# liberal survival estimate
+lib_data <- masterlist_data %>%
+  filter(!is.na(Survived_2))
+model_a <- glmmTMB(Survived_2 ~ Hatch_spread + (1|Year) 
+                   ,family = poisson, data = lib_data)
+check_model(model_a)
+summary(model_a)
+
+# Facetted figure of hatching success, hatched eggs, and conservative and liberal
+# estimates of survival by hatch spread
+ggplot(masterlist_data, aes(x = Hatch_spread, y = Value)) +
+  geom_point(alpha = 0.6) +  
+  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
+  facet_wrap(~Data, scales="free_y") +
+  theme_classic()
+
+
+
+
+
+
+
+
+
+
 
 
 data_proportions <- chick_data_filtered %>%
@@ -245,9 +273,27 @@ new_data$upper <- exp(pred$fit + 1.96 * pred$se.fit)
 #### HYPOTHESIS 1 ####
 #### PREDICTION 1b: Hatch order less important in synchronous nests ####
 
+# FINISH HATCH ORDER DATA AND READ IT IN 
+masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
+  filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
+  select(-`...22`, -`...23`, -`...24`) %>%
+  mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size)) %>%
+  mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2)) %>%
+  mutate(Hatch_begin = as.numeric(Hatch_begin),
+         Hatch_end = as.numeric(Hatch_end),
+         Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
+  mutate(Hatch_begin = as.numeric(Hatch_begin), Date_found = as.numeric(Date_found), 
+         Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
+  mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
+                  Hatch_begin, Hatch_end, Hatch_spread, Year), ~ as.numeric(as.character(.))))
+View(masterlist_data)
+
+
 # Model with hatch order as sole predictor
+# Same as Cody's paper but with Nest ID nested within year. 
 model_d <- glmmTMB(Survived_2 ~ Hatch_order +
-                     (1|Year), family = binomial, data = )
+                     (Nest_ID/Year), family = binomial, data = )
 check_model(model_d)
 summary(model_d)
 
@@ -281,52 +327,45 @@ summary(model_d)
 
 
 
+
+
 #### HYPOTHESIS 2 ####
+# Females lay together because the optimal clutch size is greater 
+# than the size of single female clutches.
 
-# Model to analyze number of hatched eggs by clutch size
+# Model analyzing number of hatched eggs by clutch size
 hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size^2) + 
-                          (1|Year), family = poisson, data = masterlist_data, 
-                        control = glmmTMBControl(rank_check = "adjust"))
+                          (1|Year), family = poisson, data = masterlist_data)
 check_model(hatched_eggs)
 summary(hatched_eggs)
 
-# Model to analyze survival by number of hatched eggs 
-hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size^2) + 
-                          (1|Year), family = poisson, data = masterlist_data, 
-                        control = glmmTMBControl(rank_check = "adjust"))
+# Model analyzing hatching rate by clutch size
+hatch_success <- glmmTMB(Hatch_success ~ Clutch_size + 
+                          (1|Year), family = gaussian, data = masterlist_data)
+check_model(hatch_success)
+summary(hatch_success)
+
+# Conservative model analyzing number of survivors by clutch size and # of hatched eggs
+survived_cons_clutch <- glmmTMB(Survived_2_cons ~ I(Clutch_size^2) + Hatched_eggs
+                          (1|Year), family = poisson, data = masterlist_data)
+check_model(survived_cons)
+summary(survived_cons)
+
+# Liberal model analyzing number of survivors by clutch size and # of hatched eggs
+survived_clutch <- glmmTMB(Survived_2 ~ I(Clutch_size^2) + Hatched_eggs
+                          (1|Year), family = poisson, data = lib_data)
 check_model(hatched_eggs)
 summary(hatched_eggs)
 
-# Model to analyze survival by clutch size
-hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size^2) + 
-                          (1|Year), family = poisson, data = masterlist_data, 
-                        control = glmmTMBControl(rank_check = "adjust"))
-check_model(hatched_eggs)
-summary(hatched_eggs)
-
-
-# Figures
-ggplot(masterlist_data, aes(x= as.numeric(Clutch_size),
-                            y= as.numeric(Hatched_eggs), 
-                            colour = Females)) +
-  geom_point() +
-  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
-  labs(y = "Hatched eggs", x = "Clutch size") +
+# Facetted figure of hatching success, hatched eggs, and conservative and liberal
+# estimates of survival by hatch spread
+ggplot(masterlist_data, aes(x = Clutch_size, y = Value)) +
+  geom_point(alpha = 0.6) +  
+  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
+  facet_wrap(~Data, scales="free_y") +
   theme_classic()
 
-df <- masterlist_data %>%
-  filter(!is.na(as.numeric(Survived_2))) %>%
-  group_by(Hatched_eggs, Survived_2) %>%
-  summarise(count = n(), .groups = "drop")
-View(df)
-
-ggplot(df, aes(x = Hatched_eggs, y = Survived_2, size = factor(count))) +
-  geom_point(alpha = 0.6) +
-  scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "5" = 6, "7" = 7, "11" = 11)) + 
-  theme_classic() +
-  labs(y = "Survived", x = "Hatched eggs") 
-
-# Surived by hatched eggs again but jittered points and by female.
+# Figures of survivors by hatched eggs for conservative model
 ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Survived_2), colour = Females)) +
   geom_point(alpha = 0.6) +
   geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
@@ -334,14 +373,6 @@ ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Survive
   labs(y = "Survived", x = "Hatched eggs") +
   scale_y_continuous(c(0, 5)) +
   scale_x_continuous(breaks = seq(0, 8, by = 1))
-
-ggplot(masterlist_data, aes(x= as.numeric(Clutch_size),
-                            y= as.numeric(Hatched_eggs), 
-                            colour = Females)) +
-  geom_point() +
-  geom_jitter(position = position_jitter(width = 0.5, height = 0), size = 2, alpha = 0.7) +
-  labs(y = "Hatched eggs", x = "Clutch size") +
-  theme_classic()
 
 
 
