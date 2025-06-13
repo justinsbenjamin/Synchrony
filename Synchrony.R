@@ -61,8 +61,6 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
 # removing the NAs. 
 View(masterlist_data)
 
-# Do pivot longer and combine things like hatch success, observed period.
-# hatched eggs, survival etc. 
 
 # mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females"))
 
@@ -83,11 +81,7 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
 mutate(Hatch_begin = as.numeric(Hatch_begin), Date_found = as.numeric(Date_found), 
        Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
   mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
-                  Hatch_begin, Hatch_end, Hatch_spread, Year), ~ as.numeric(as.character(.)))) %>%
-  pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
-                        'Survived_2', 'Survived_2_cons'), 
-               names_to = 'Data', 
-               values_to = 'Value')
+                  Hatch_begin, Hatch_end, Hatch_spread, Year), ~ as.numeric(as.character(.))))
 View(masterlist_data)
 
 
@@ -122,15 +116,6 @@ ggplot(masterlist_data, aes(x = Hatch_spread, y = Value)) +
   geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
   facet_wrap(~Data, scales="free_y") +
   theme_classic()
-
-
-
-
-
-
-
-
-
 
 
 
@@ -329,50 +314,79 @@ summary(model_d)
 
 
 
+
+
+
 #### HYPOTHESIS 2 ####
 # Females lay together because the optimal clutch size is greater 
 # than the size of single female clutches.
 
+# PREDICTION 2a: Larger clutches hatch more eggs 
+
 # Model analyzing number of hatched eggs by clutch size
 hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size^2) + 
-                          (1|Year), family = poisson, data = masterlist_data)
+                          (1|Year), family = poisson, data = wider_data)
 check_model(hatched_eggs)
-summary(hatched_eggs)
 
 # Model analyzing hatching rate by clutch size
 hatch_success <- glmmTMB(Hatch_success ~ Clutch_size + 
                           (1|Year), family = gaussian, data = masterlist_data)
 check_model(hatch_success)
-summary(hatch_success)
+
+
+# PREDICTION 2b: Larger broods have more survivors
+# PREDICTION 2c: Larger clutches have greater hatching spread 
 
 # Conservative model analyzing number of survivors by clutch size and # of hatched eggs
-survived_cons_clutch <- glmmTMB(Survived_2_cons ~ I(Clutch_size^2) + Hatched_eggs
+survived_cons_clutch <- glmmTMB(Survived_2_cons ~ I(Clutch_size^2) + Hatched_eggs +
                           (1|Year), family = poisson, data = masterlist_data)
 check_model(survived_cons)
-summary(survived_cons)
 
 # Liberal model analyzing number of survivors by clutch size and # of hatched eggs
 survived_clutch <- glmmTMB(Survived_2 ~ I(Clutch_size^2) + Hatched_eggs
                           (1|Year), family = poisson, data = lib_data)
 check_model(hatched_eggs)
-summary(hatched_eggs)
+
+# Pivotting data longer to make facetted figure
+longer_data <- masterlist_data %>%
+pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
+                      'Survived_2', 'Survived_2_cons'), 
+             names_to = 'Data', 
+             values_to = 'Value')
 
 # Facetted figure of hatching success, hatched eggs, and conservative and liberal
 # estimates of survival by hatch spread
-ggplot(masterlist_data, aes(x = Clutch_size, y = Value)) +
-  geom_point(alpha = 0.6) +  
-  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
-  facet_wrap(~Data, scales="free_y") +
+# Could also use geom_jitter instead of geom_count 
+# geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) 
+
+ggplot(longer_data, aes(x = Clutch_size, y = Value)) +
+  geom_count() +  
+  facet_wrap(~Data, scales="free_y", labeller = labeller(
+    Data = c(Hatched_eggs = "Number of hatched eggs",
+             Hatch_success = "Hatching rate", 
+             Survived_2 = "Number of survivors",
+             Survived_2_cons = "Conservative number of survivors"))) +
+  scale_size_area(max_size = 6) + 
+  labs(y= "Counts", x = "Clutch size") +
   theme_classic()
 
-# Figures of survivors by hatched eggs for conservative model
-ggplot(masterlist_data, aes(x = as.numeric(Hatched_eggs), y = as.numeric(Survived_2), colour = Females)) +
-  geom_point(alpha = 0.6) +
-  geom_jitter(position = position_jitter(width = 0.2, height = 0.2), size = 2, alpha = 0.7) +
+# Figure of number survivors by number of hatched eggs with liberal estimate
+ggplot(masterlist_data, aes(x = Hatched_eggs, y = Survived_2)) +
+  geom_count() +
+  scale_size_area(max_size = 6) + 
   theme_classic() +
   labs(y = "Survived", x = "Hatched eggs") +
   scale_y_continuous(c(0, 5)) +
   scale_x_continuous(breaks = seq(0, 8, by = 1))
+
+# Figure of number of survivors by number hatched eggs with conservative estimate
+ggplot(masterlist_data, aes(x = Hatched_eggs, y = Survived_2_cons)) +
+  geom_count() +
+  scale_size_area(max_size = 6) + 
+  theme_classic() +
+  labs(y = "Survived", x = "Hatched eggs") +
+  scale_y_continuous(c(0, 5)) +
+  scale_x_continuous(breaks = seq(0, 10, by = 1))
 
 
 
