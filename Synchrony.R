@@ -111,7 +111,13 @@ summary(model_a)
 
 # Facetted figure of hatching success, hatched eggs, and conservative and liberal
 # estimates of survival by hatch spread
-ggplot(masterlist_data, aes(x = Hatch_spread, y = Value)) +
+
+masterlist_data <- masterlist_data %>%
+  mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females")) %>%
+  mutate(Survived_2 = ifelse(Females == "Joint Females", Survived_2 / 2, Survived_2))
+  
+
+ggplot(longer_data, aes(x = Hatch_spread, y = Value, colour = Females)) +
   geom_point(alpha = 0.6) +  
   geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
   facet_wrap(~Data, scales="free_y") +
@@ -308,6 +314,55 @@ summary(model_d)
 
 
 # Binomial figure of survival by hatch order
+
+
+
+
+
+
+# Reading in and filtering chick data include only the good nests and then
+# filter through those and merge banding information from recaptures with 
+# 
+# Step 1: Create a unique chick ID combining Year, NestID, and TN
+
+chick_data <- read_excel("Compiled_Chick_Data_cleaned") %>%
+  filter(Exclusion == "GOOD") %>% 
+  mutate(ChickID = paste(Year, NestID, TN, sep = "_"))
+
+
+
+
+# Step 2: Keep the first record for each chick (e.g., hatching data)
+first_records <- your_data %>%
+  arrange(ChickID, Date) %>%
+  group_by(ChickID) %>%
+  slice(1) %>%
+  ungroup()
+
+# Step 3: Extract latest banding data (or best available)
+banding_data <- your_data %>%
+  filter(!is.na(BandID)) %>%
+  arrange(ChickID, desc(Date)) %>%
+  group_by(ChickID) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(
+    ChickID,
+    BandID,
+    BandDate = Date,
+    BandMass = Mass,
+    BandTarsus = Tarsus
+  )
+
+# Step 4: Merge banding data into first capture
+final_data <- left_join(first_records, banding_data, by = "ChickID")
+
+
+
+
+
+
+
 
 
 
