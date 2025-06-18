@@ -270,6 +270,12 @@ chick_data <- read_excel("Final_Compiled_Chick_Data.xlsx") %>%
   mutate(Survived = if (!is.numeric(Survived)) as.numeric(Survived) else Survived)
 View(chick_data)
 
+
+
+
+
+
+
 chick_data$Survived <- as.numeric(as.character(chick_data$Survived))
 
 # Model with hatch order as sole predictor
@@ -308,8 +314,43 @@ summary(model_d)
 ggplot(chick_data, aes(x = Hatch_order, y = Survived)) +
   geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
   labs(y = "Survived", x = "Hatch order") +
-  theme_classic
-  
+  theme_classic()
+
+chick_data_longer <- chick_data %>%
+  filter(Mass < 33) %>%
+  filter(`Shield to Tip` < 24) %>%
+  pivot_longer(cols = c('Mass', 'Tarsus',
+                        'Shield to Tip'), 
+               names_to = 'Morphometrics', 
+               values_to = 'Value') %>%
+  filter(!is.na(Value))
+
+View(chick_data_longer)
+
+ggplot(chick_data_longer, aes(x = Hatch_Day, y = Value, colour = Year)) +
+  geom_jitter(width = 0.25, height = 0.25, size = 2, alpha = 0.7) +
+  facet_wrap(~Morphometrics, scales="free_y", labeller = labeller(
+    Morphometrics = c(Mass = "Mass (g)",
+             Tarsus = "Left outer tarsus (mm)", 
+             `Shield to Tip` = "Shield to tip (mm)"))) +
+  scale_y_continuous() +
+  theme_classic()
+
+chick_data <- chick_data %>% 
+  filter(Mass < 33) %>%
+  filter(`Shield to Tip` < 24) 
+ggplot(chick_data, aes(x = as.numeric(`Shield to Tip`), y = Survived, colour = Year)) +
+  geom_jitter(width = 0.25, height = 0.25, size = 2, alpha = 0.7) + 
+  theme_classic()
+
+
+
+
+
+
+
+
+
 # Binomial figure of survival by hatch day 
 ggplot(chick_data, aes(x = Hatch_Day, y = Hatch_order, colour = Survived)) +
   geom_jitter(width = 0.5, height = 0.5, size = 2, alpha = 0.7) +
@@ -388,13 +429,19 @@ ggplot(masterlist_data, aes(x = Hatched_eggs, y = Survived_2_cons)) +
 
 
 
+
+
+
+
+
+
 ########## CHAPTER 3 #########
 #### SYNCHRONY EXPERIMENT ####
 ##############################
 
 #### CH.3 INTRO AND HYPOTHESIS ####
 # Here we experimentally lengthened and shortened the HS of nests 
-# in Pūkeko by using known laying dates, candling images, and floatation scores.
+# in Pūkeko by using known laying dates, candling images, and flotation scores.
 
 # HYPOTHESIS: Jointly laying synchronously with a close relative increases
 # the inclusive fitness of the dominant female compared to hypothetical 
