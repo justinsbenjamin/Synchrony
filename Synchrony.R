@@ -19,16 +19,16 @@ library(effsize)
 library(DHARMa)
 
 ########### CHAPTER 2 ##########
-####   OBSERVATIONAL DATA   ####
+###### OBSERVATIONAL DATA ######
 ################################
 
 #### CH.2 INTRO AND HYPOTHESES ####
-# I am investigating nesting factors in Pūkeko (Porphyrio melanotus melanotus) to
-# explore the effects of hatching spread (HS) on hatching success and survival.
-# The data for chapter 2 has been compiled from field books and spreadsheets to create a 
-# master dataset with both summary data for all nests along with specific 
-# hatching data for individual nests. Data is from the years 2008, 2010, 2013, 
-# 2014-2018, 2022-2024. 
+# I am investigating nesting factors in Pūkeko (Porphyrio melanotus melanotus) 
+# to explore the effects of hatching spread (HS) on hatching success and 
+# survival. The data for chapter 2 has been compiled from field books and 
+# spreadsheets to create a master data set with both summary data for all nests 
+# along with specific hatching data for individual nests. Data is from the years 
+# 2008, 2010, 2013, 2014-2018, 2022-2024. 
 
 # HYPOTHESIS 1: Dominant females lay synchronously with another female to increase 
 # their inclusive fitness. 
@@ -45,52 +45,59 @@ library(DHARMa)
 # PREDICTION 3a: Hatch order less important with short HS
 
 #### DATA FILTERING AND ORGANIZATION ####
-
 # Sample sizes of excluded and included groups
 nest_counts <- read_excel("Nests_masterlist.xlsx") %>%
 count(Exclusion, name = "nest_counts") %>%
 arrange(desc("nest_counts"))
 print(nest_counts)
 
+masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
+  filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
+  mutate(Nest_ID                 = paste(Year, Nest_ID, sep = "_"), # Unique Nest ID 
+         Hatch_success           = as.numeric(Hatched_eggs)/as.numeric(Clutch_size), 
+         Survived_2_cons         = ifelse(is.na(Survived_2), 0, Survived_2), 
+         Hatch_begin             = as.numeric(Hatch_begin),
+         Hatch_end               = as.numeric(Hatch_end),
+         Hatch_spread            = Hatch_end - Hatch_begin + 1, 
+         Hatch_begin             = as.numeric(Hatch_begin), 
+         Date_found              = as.numeric(Date_found), 
+         Observed_nesting_period = as.numeric(Hatch_begin - Date_found))
+  mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
+                  Hatch_begin, Hatch_end, Hatch_spread, Year), 
+                  ~ as.numeric(as.character(.))))
+View(masterlist_data)
+
 #### HYPOTHESIS 1 ####
 # Dominant females lay synchronously with another female to increase 
 # their inclusive fitness. 
 
-masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
-  filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>% # Unique nest ID 
-  mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size)) %>%
-  mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2)) %>%
-  mutate(Hatch_begin = as.numeric(Hatch_begin),
-         Hatch_end = as.numeric(Hatch_end),
-         Hatch_spread = Hatch_end - Hatch_begin + 1) %>%
-mutate(Hatch_begin = as.numeric(Hatch_begin), Date_found = as.numeric(Date_found), 
-       Observed_incubation_period = as.numeric(Hatch_begin - Date_found)) %>%
-  mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
-                  Hatch_begin, Hatch_end, Hatch_spread, Year), ~ as.numeric(as.character(.))))
-View(masterlist_data)
-
-# mutate(Females = ifelse(Clutch_size <= 5, "Single Female", "Joint Females"))
-
-### Most descriptive model to break it ###
-# Model with all fixed effects as random effects to break and have singular fit. 
-model_a <- glmmTMB(as.numeric(Hatched_eggs) ~ as.numeric(Clutch_size) + as.numeric(Group_size) + as.numeric(Hatch_spread) +
-                     (1|Year) + (1|as.numeric(Clutch_size)) + (1|as.numeric(Group_size)) +
-                     (1|as.numeric(Hatch_spread)), family = poisson(link = log), data = masterlist_data)
-check_model(model_a)
-summary(model_a)
-
-
-
 #### PREDICTION 1a: Shorter HS have greater hatching success ####
-model_2a <- glmmTMB(Hatch_success ~ Hatch_spread + (1|Year) 
-                   ,family = gaussian, data = masterlist_data)
+model_2a <- glmmTMB(Hatched_eggs ~ Hatch_spread + (1|Year) 
+                   ,family = poisson, data = masterlist_data)
 check_model(model_2a)
-
 res <- simulateResiduals(fittedModel = model_2a, plot = TRUE)
 testDispersion(res)
 
-summary(model_2a)
+model_2b <- glmmTMB(Hatched_eggs ~ Hatch_spread + I(Hatch_spread^2) + (1|Year) 
+                    ,family = poisson, data = masterlist_data)
+check_model(model_2b)
+res <- simulateResiduals(fittedModel = model_2b, plot = TRUE)
+testDispersion(res)
+
+model_2c <- glmmTMB(Hatched_eggs ~ I(Hatch_spread^2) + (1|Year) 
+                    ,family = nbinom2, data = masterlist_data)
+check_model(model_2c)
+res <- simulateResiduals(fittedModel = model_2c, plot = TRUE)
+testDispersion(res)
+
+null_model <- glmmTMB(Hatched_eggs ~ 1 + (1|Year), family = nbinom2, 
+                      data = masterlist_data)
+check_model(null_model)
+res_null <- simulateResiduals(fittedModel = null_model, plot = TRUE)
+plot(res_null)
+
+summary(masterlist_data$Hatched_eggs)
+hist(masterlist_data$Hatched_eggs)
 
 
 #### PREDICTION 1b: Shorter HS have better survival ####
@@ -116,169 +123,64 @@ check_model(model_2c)
 res <- simulateResiduals(fittedModel = model_2c, plot = TRUE)
 testDispersion(res)
 testZeroInflation(res) 
-
 summary(model_2c)
 
-# Facetted figure of hatching success, hatched eggs, and conservative and liberal
+# Faceted figure of hatching rate, hatched eggs, and conservative and liberal
 # estimates of survival by hatch spread
 
-ggplot(longer_data, aes(x = Hatch_spread, y = Value, colour = Clutch_size)) +
-  geom_jitter() +   
-  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
-  facet_wrap(~Data, scales="free_y", labeller = labeller(
-  Data = c(Hatch_success = "Hatch success (%)",
-           Hatched_eggs = "Hatched eggs", 
-           Survived_2 = "Survivors (lib)", 
-           Survived_2_cons = "Survived (cons)"))) +
-  labs(x = "Hatch spread (days)", y = "Counts") +
-  geom_smooth(method = "loess") +
-  theme_classic() 
+# Pivoting data longer to make faceted figure
+longer_data <- masterlist_data %>%
+  pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
+                        'Survived_2'), 
+               names_to = 'Data', 
+               values_to = 'Value') 
+View(longer_data)
+
+df_long <- df %>%
+  mutate(liberal = ifelse(is.na(survival), NA, survival),
+         conservative = ifelse(is.na(survival), 0, survival)) %>%
+  pivot_longer(cols = c(liberal, conservative), names_to = "estimate", 
+               values_to = "survival")
+
+
+df_long <- df %>%
+  pivot_longer(cols = c('Hatched_eggs', 'Hatch_success', 'Survived_2'),
+               names_to = "Data",
+               values_to = "Value") %>%
+  mutate(converted_from_na = ifelse(Data == "Survived_2", 
+                                    masterlist_data$converted_from_na, FALSE))
+
+
+longer_data <- masterlist_data %>%
+  pivot_longer(cols = c(Hatched_eggs, Hatch_success, Survived_2_cons),
+               names_to = "Data",
+               values_to = "Value") %>%
+  mutate(converted_from_na = ifelse(Data == "Survived_2_cons", converted_from_na, FALSE))
 
 
 
-data_proportions <- chick_data_filtered %>%
-  group_by(Nest_ID, Hatch_day) %>%
-  summarise(Chicks_hatched = n(), .groups = "drop") %>%  # Count how many chicks hatched per day
-  left_join(nest_data_filtered %>% dplyr::select(Nest_ID, Hatched_eggs, Females), by = "Nest_ID") %>%
-  mutate(Hatch_proportion = (Chicks_hatched / Hatched_eggs) * 100)  # Compute correct percentage
-
-# Plot violin graph
-ggplot(data_proportions, aes(x = as.factor(Hatch_day), y = Hatch_proportion, group = Nest_ID)) +
-  geom_jitter(position = position_jitter(width = 0.2, height = 0), 
-              size = 1, alpha = 0.8) + 
-  scale_y_continuous(labels = scales::percent_format(scale = 1), limits = c(0, 100), 
-                     breaks = seq(0, 100, by = 10)) +  
-  labs(x = "Relative hatching day",
-       y = "Percentage of hatched chicks per nest") +
+ggplot(longer_data, aes(x = Hatch_spread, y = Value, color = converted_from_na)) +
+  geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
+  scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"),
+                     name = "Converted from NA") +
+  facet_wrap(~Data, scales = "free_y") +
   theme_classic() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(size = 12),
-        axis.text.y = element_text(size = 12),
-        plot.title = element_text(hjust = 0.5, size = 14)) +
-  facet_wrap(~ Females, scales = "free_x")
-
-
-df <- masterlist_data %>%
-  filter(!is.na(as.numeric(Survived_2))) %>%
-  group_by(Hatch_spread, Survived_2) %>%
-  summarise(count = n(), .groups = "drop")
-View(df)
-
-ggplot(df, aes(x = Hatch_spread, y = Survived_2, size = factor(count))) +
-  geom_point(alpha = 0.6) +
-  scale_size_manual(values = c("1" = 1, "2" = 2, "3" = 3, "4" = 4, "6" = 6, "13" = 10)) + 
-  theme_classic() +
-  labs(y = "Survived", x = "Hatch spread (days)") 
-
-# Hatch rate and hatch spread plot
-# Figure out how to add linear regressions bound by 0 and 1
-# Ian suggested pivoting the data longer and doing raw counts of hatched eggs 
-# and total clutch size as that will be more informative in a glmm than just 
-# hatch success since there is a lot of variation in clutch size. 
-
-# Clean and prepare data
-df <- masterlist_data
-df$Hatch_success <- as.numeric(df$Hatch_success)
-df$Hatch_success[df$Hatch_success == 1] <- 0.999
-df$Hatch_success[df$Hatch_success == 0] <- 0.001
-df$Hatch_spread <- as.numeric(df$Hatch_spread)
-
-# Fit beta regression
-fit <- betareg(Hatch_success ~ Hatch_spread, data = df)
-
-# Generate prediction data
-pred_data <- data.frame(Hatch_spread = seq(min(df$Hatch_spread, na.rm = TRUE),
-                                           max(df$Hatch_spread, na.rm = TRUE), 
-                                           length.out = 100))
-
-# Design matrix for new data (for SE calculation)
-X <- model.matrix(~ Hatch_spread, data = pred_data)
-
-# Get predicted values on link (logit) scale
-pred_link <- predict(fit, newdata = pred_data, type = "link")
-
-# Get variance-covariance matrix of model coefficients
-vcov_mat <- vcov(fit)
-
-# Compute standard errors on the link scale
-se_link <- sqrt(rowSums((X %*% vcov_mat[1:2, 1:2]) * X))  # Only use mean model part of vcov
-
-# Inverse logit function
-inv_logit <- function(x) exp(x) / (1 + exp(x))
-
-# Compute predicted fit and CI on response scale
-pred_data$fit   <- inv_logit(pred_link)
-pred_data$lower <- inv_logit(pred_link - 1.96 * se_link)
-pred_data$upper <- inv_logit(pred_link + 1.96 * se_link)
-
-ggplot(df, aes(x = Hatch_spread, y = Hatch_success, colour = Females)) +
-  geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
-  geom_ribbon(data = pred_data, aes(x = Hatch_spread, ymin = lower, ymax = upper), 
-              fill = "grey70", alpha = 0.4, inherit.aes = FALSE) +
-  geom_line(data = pred_data, aes(x = Hatch_spread, y = fit), 
-            color = "black", size = 0.75, inherit.aes = FALSE) +
-  labs(y = "Hatch rate", x = "Hatch spread (days)") +
-  theme_classic()
-
-
-# Plot
-ggplot(df, aes(x = Hatch_spread, y = Hatch_success, colour = Females)) +
-  geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
-  geom_ribbon(data = pred_data, aes(ymin = lower, ymax = upper), inherit.aes = FALSE,
-              fill = "grey70", alpha = 0.4) +
-  geom_line(data = pred_data, aes(y = fit), inherit.aes = FALSE, color = "black", size = 1.2) +
-  labs(y = "Hatch rate", x = "Hatch spread (days)") +
-  theme_classic()
-
-ggplot(masterlist_data, aes(x = Hatch_spread, y = Hatch_success, colour = Females)) +
-  geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
-  labs(y = "Hatch rate", x = "Hatch spread (days)") +
-  theme_classic()
-
-ggplot(masterlist_data, aes(x = Clutch_size, y = Hatch_success)) +
-  geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
-  labs(y = "Hatch rate", x = "Clutch size") +
-  theme_classic()
-
-
-# Get residuals: asynchrony relative to expected span for brood size
-# Doesn't follow assumptions of all nests incubated before or after 
-# egg laying period is done though.Needs some touch ups still. 
-model <- lm(Hatch_spread ~ Hatched_eggs, data = masterlist_data)
-masterlist_data$hatching_asynchrony <- resid(model)
-masterlist_data <- masterlist_data 
-hist(masterlist_data$hatching_asynchrony)
-
-glm_fit <- glm(as.numeric(Hatch_spread) ~ as.numeric(Hatched_eggs), family = poisson, data = masterlist_data)
-summary(glm_fit)$dispersion
-overdispersion <- sum(residuals(glm_fit, type = "pearson")^2) / df.residual(glm_fit)
-print(overdispersion)
-
-new_data <- data.frame(Hatched_eggs = seq(min(masterlist_data$Hatched_eggs, na.rm = TRUE),
-                                          max(masterlist_data$Hatched_eggs, na.rm = TRUE), length.out = 100))
-
-# Get predictions on response scale (counts)
-pred <- predict(glm_fit, newdata = new_data, type = "link", se.fit = TRUE)
-new_data$fit <- exp(pred$fit)
-new_data$lower <- exp(pred$fit - 1.96 * pred$se.fit)
-new_data$upper <- exp(pred$fit + 1.96 * pred$se.fit)
-
-
-
+  labs(x = NULL, y = NULL)
 
 
 #### HYPOTHESIS 3 ####
 #### PREDICTION 3a: Hatch order less important in synchronous nests ####
 
 chick_data <- read_excel("Final_Compiled_Chick_Data.xlsx") %>%
-  mutate(ChickID = paste(Year, Nest_ID, sep = "_")) %>%
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
   filter(!is.na(Survived) & Survived %in% c(0, 1)) %>%
-  mutate(Survived = if (!is.numeric(Survived)) as.numeric(Survived) else Survived) 
+  mutate(Survived = if (!is.numeric(Survived)) as.numeric(Survived) else Survived)
 View(chick_data)
 
-# Left join data from masterlist and chick data 
-
-chick_data$Survived <- as.numeric(as.character(chick_data$Survived))
+chick_data$Clutch_size <- masterlist_data$Clutch_size[match(chick_data$Nest_ID,
+                                          masterlist_data$Nest_ID)]
+chick_data$Hatch_spread <- masterlist_data$Hatch_spread[match(chick_data$Nest_ID, 
+                                           masterlist_data$Nest_ID)]
 
 # Model with hatch order as sole predictor variable. 
 # Same as Cody's paper but with Nest ID nested within year. 
@@ -294,10 +196,21 @@ check_model(model_d)
 summary(model_d)
 
 # Model with interaction between hatch order and hatching spread
-model_d <- glmmTMB(Survived_2 ~ Hatch_order*Hatch_spread +
-                     (Nest_ID/Year), family = binomial, data = chick_data)
+model_d <- glmmTMB(Survived ~ Hatch_order*Hatch_spread +
+                     (1|Nest_ID), family = binomial, data = chick_data)
 check_model(model_d)
+res <- simulateResiduals(fittedModel = model_d, plot = TRUE)
+testDispersion(res)
+testZeroInflation(res) 
+
+
 summary(model_d)
+
+ggplot(chick_data, aes(x = Hatch_order, y = Survived)) +
+  geom_jitter(width = 0.5, height = 0, size = 2, alpha = 0.7) +
+  labs(y = "Survived", x = "Hatch_spread") +
+  theme_classic()
+
 
 # Model of laying order on hatching order 
 model_d <- glmmTMB(Hatch_order ~ Lay_order +
@@ -342,15 +255,53 @@ ggplot(chick_data_longer, aes(x = Hatch_order, y = Value, colour = Year)) +
   theme_classic()
 
 # Figure of survival by size at hatching 
-ggplot(chick_data_longer, aes(x = Value, y = as.factor(as.numeric(Survived)), colour = Year)) +
-  geom_jitter(width = 0.25, height = 0, size = 2, alpha = 0.7) +
-  facet_wrap(~Morphometrics, scales="free_y", labeller = labeller(
+ggplot(chick_data_longer, aes(x = Value, y = as.character(Survived), 
+                              colour = Year)) +
+  geom_point(size = 2, alpha = 0.7) +
+  facet_wrap(~Morphometrics, scales="free_x", labeller = labeller(
     Morphometrics = c(Mass = "Mass (g)",
                       Tarsus = "Left outer tarsus (mm)", 
                       `Shield to Tip` = "Shield to tip (mm)"))) +
-  scale_y_discrete(labels = c("0", "1")) +
-  theme_classic()
+  labs(x = "Measurement", y = "Survival") +
+  scale_x_continuous() +
+  theme_classic() +
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
 
+
+chick_data <- chick_data %>%
+  filter(Mass < 33) %>%
+  filter(`Shield to Tip` < 24)
+
+# Model of laying spread on hatching spread
+model_d <- glmmTMB(Mass ~ Hatch_order +
+                     (1|Nest_ID), family = gaussian, data = chick_data)
+check_model(model_d)
+res <- simulateResiduals(fittedModel = model_d, plot = TRUE)
+testDispersion(res)
+summary(model_d)
+
+
+model_d <- glmmTMB(`Shield to Tip` ~ Hatch_order +
+                     (1|Nest_ID), family = gaussian, data = chick_data)
+check_model(model_d)
+res <- simulateResiduals(fittedModel = model_d, plot = TRUE)
+testDispersion(res)
+summary(model_d)
+
+model_quad <- glmmTMB(Survived ~ Mass + I(Mass^2) + (1 | Nest_ID), 
+                      family = binomial, data = chick_data)
+
+
+chick_data$logMass <- log(chick_data$Mass)
+model_log <- glmmTMB(Survived ~ logMass + (1|Nest_ID), family = binomial, data = 
+                       chick_data)
+
+model_d <- glmmTMB(Survived ~ Mass + `Shield to Tip` +
+                     (1|Nest_ID), family = binomial, data = chick_data)
+check_model(model_d)
+res <- simulateResiduals(fittedModel = model_d, plot = TRUE)
+testDispersion(res)
+testZeroInflation(res) 
 
 
 #### HYPOTHESIS 2 ####
@@ -360,8 +311,12 @@ ggplot(chick_data_longer, aes(x = Value, y = as.factor(as.numeric(Survived)), co
 # PREDICTION 2a: Larger clutches hatch more eggs
 
 # Model analyzing number of hatched eggs by clutch size
-hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size) + 
-                          (1|Year), family = poisson(link = "log"), data = wider_data)
+masterlist_data <- masterlist_data%>%
+  filter(Hatched_eggs > 0)
+
+hatched_eggs <- glmmTMB(Hatched_eggs ~ I(Clutch_size^2) +
+                          (1|Year), family = poisson(link = "log"), 
+                        data = masterlist_data)
 check_model(hatched_eggs)
 res <- simulateResiduals(fittedModel = hatched_eggs, plot = TRUE)
 testDispersion(res)
@@ -375,18 +330,38 @@ res <- simulateResiduals(fittedModel = hatched_eggs, plot = TRUE)
 testDispersion(res)
 
 
+hatch_spread1 <- glmmTMB(Hatch_spread ~ Clutch_size + Hatched_eggs +
+                        (1|Year), family = nbinom2, data = masterlist_data)
+check_model(hatch_spread1)
+res <- simulateResiduals(fittedModel = hatch_spread1, plot = TRUE)
+testDispersion(res)
+
+
+hatch_spread <- glmmTMB(Hatch_spread ~ Hatched_eggs + 
+                       (1|Year), family = poisson, data = masterlist_data)
+check_model(hatch_spread)
+res <- simulateResiduals(fittedModel = hatch_spread, plot = TRUE)
+testDispersion(res)
+summary(hatch_spread)
+
 # PREDICTION 2b: Larger broods have more survivors
 
-# Conservative model analyzing number of survivors by clutch size and # of hatched eggs
+
+
+
+# Conservative model analyzing number of survivors by clutch size and 
+# te number of hatched eggs
 survived_cons_clutch <- glmmTMB(Survived_2_cons ~ I(Clutch_size^2) + Hatched_eggs +
-                          (1|Year), family = poisson(link = "log"), data = masterlist_data)
+                        (1|Year), family = poisson(link = "log"), 
+                        data = masterlist_data)
 check_model(survived_cons)
 res <- simulateResiduals(fittedModel = survived_cons_clutch, plot = TRUE)
 testDispersion(res)
 testZeroInflation(res) 
 
 survived_cons_clutch <- glmmTMB(Survived_2_cons ~ Clutch_size + Hatched_eggs +
-                                                      (1|Year), family = poisson(link = "log"), data = masterlist_data)
+                               (1|Year), family = poisson(link = "log"), 
+                               data = masterlist_data)
 check_model(survived_cons)
 res <- simulateResiduals(fittedModel = survived_cons_clutch, plot = TRUE)
 testDispersion(res)
@@ -411,7 +386,8 @@ pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
 # Faceted figure of hatching success, hatched eggs, and conservative and liberal
 # estimates of survival by clutch size.
 ggplot(longer_data, aes(x = Clutch_size, y = Value)) +
-  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
+  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, 
+              alpha = 0.7) +
   facet_wrap(~Data, scales="free_y", labeller = labeller(
     Data = c(Hatched_eggs = "Number of hatched eggs",
              Hatch_success = "Hatching rate (%)", 
@@ -429,13 +405,32 @@ longer_data_2 <- masterlist_data %>%
 
 # Figure of number survivors by number of hatched eggs with liberal estimate
 ggplot(longer_data_2, aes(x = Hatched_eggs, y = Value)) +
-  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, alpha = 0.7) +
+  geom_jitter(position = position_jitter(width = 0.2, height = 0), size = 2, 
+              alpha = 0.7) +
   facet_wrap(~Data, scales="free_y", labeller = labeller(
     Data = c(Hatch_success = "Hatching rate (%)", 
              Survived_2 = "Number of survivors",
              Survived_2_cons = "Conservative number of survivors"))) +
   theme_classic() +
   scale_x_continuous(breaks = seq(0, 8, by = 1))
+
+
+
+
+
+
+
+### Supplementary Chapter 2 analyses ###
+### Most descriptive model to break it ###
+# Model with all fixed effects as random effects to break and have singular fit. 
+model_a <- glmmTMB(as.numeric(Hatched_eggs) ~ as.numeric(Clutch_size) + 
+                     as.numeric(Group_size) + as.numeric(Hatch_spread) +
+                     (1|Year) + (1|as.numeric(Clutch_size)) + 
+                     (1|as.numeric(Group_size)) +
+                     (1|as.numeric(Hatch_spread)), family = poisson(link = log), 
+                     data = masterlist_data)
+check_model(model_a)
+summary(model_a)
 
 
 ########## CHAPTER 3 #########
@@ -526,13 +521,16 @@ t.test(Transfered_time ~ Treatment, data = successful_nests_MT)
 # Can also do this for a single figure instead of faceted. 
 df_long_filtered <- subset(df_long, Variable != "Number_transfers")
 
-ggplot(df_long_filtered, aes(x = Treatment, y = as.numeric(Value), colour = Treatment)) +
+ggplot(df_long_filtered, aes(x = Treatment, y = as.numeric(Value), 
+                             colour = Treatment)) +
   geom_boxplot(outlier.shape = NA) +  
-  geom_jitter(position = position_jitter(width = 0.1, height = 0), size = 3, alpha = 0.7) +
+  geom_jitter(position = position_jitter(width = 0.1, height = 0), 
+              size = 3, alpha = 0.7) +
   facet_wrap(~Variable, scales="free_y") +
   guides(color = "none") +
   theme_classic() +
-  scale_color_manual(values = c("Asynchronous" = "darkblue", "Synchronous" = "firebrick2")) +
+  scale_color_manual(values = c("Asynchronous" = "darkblue", 
+                                "Synchronous" = "firebrick2")) +
   labs(x = NULL, y = NULL) 
 
 ### PREDICTION A ###: Synch nests have greater hatching success than Asynch nests
@@ -590,8 +588,8 @@ check_model(model_3c)
 summary(model_3c)
 
 
-### PREDICTION B ###: Synch nests have greater survival than Asynch nests as there ###
-# are fewer late hatching chicks with poorer survival.
+### PREDICTION B ###: Synchronous nests have greater survival than Asynchronous
+# nests as there are fewer late hatching chicks with poorer survival.
 
 # Model analyzing number of survivors by treatment.
 model_3d <- glmmTMB(Survival_60 ~ Treatment +
@@ -622,11 +620,13 @@ data_long_format <- successful_nests %>%
   mutate(Treatment_survival = paste(Treatment, Survival_60, sep = "_")) 
 
 # Bar plot of survival data.
-ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival))) +
+ggplot(data_long_format, aes(x = Treatment, fill = factor(Treatment_survival)))+
   geom_bar(position = "dodge") +
   labs(x = "Treatment", y = "Count", fill = "Survived") +
-  scale_fill_manual(values = c("Asynchronous_1" = "darkblue", "Asynchronous_0" = "blue", 
-                               "Synchronous_1" = "firebrick4", "Synchronous_0" = "firebrick1"), 
+  scale_fill_manual(values = c("Asynchronous_1" = "darkblue", 
+                               "Asynchronous_0" = "blue", 
+                               "Synchronous_1" = "firebrick4", 
+                               "Synchronous_0" = "firebrick1"), 
                     guide = "none") +
   theme_classic() 
 
