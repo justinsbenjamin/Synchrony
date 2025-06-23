@@ -26,17 +26,17 @@ library(DHARMa)
 # I am investigating nesting factors in Pūkeko (Porphyrio melanotus melanotus) 
 # to explore the effects of hatching spread (HS) on hatching success and 
 # survival. The data for chapter 2 has been compiled from field books and 
-# spreadsheets to create a master data set with both summary data for all nests 
-# along with specific hatching data for individual nests. Data is from the years 
-# 2008, 2010, 2013, 2014-2018, 2022-2024. 
+# spreadsheets to create a master data set with both summary data for all 
+# nests along with specific hatching data for individual nests. Data is from 
+# the years 2008, 2010, 2013, 2014-2018, 2022-2024. 
 
-# HYPOTHESIS 1: Dominant females lay synchronously with another female to increase 
-# their inclusive fitness. 
+# HYPOTHESIS 1: Dominant females lay synchronously with another female to 
+# increase their inclusive fitness. 
 # PREDICTION 1a: Shorter HS have better hatching success
 # PREDICTION 1b: Shorter HS have better survival
 
-# HYPOTHESIS 2: Females lay together because the optimal clutch size is greater 
-# than the size of single female clutches regardless of hatch spread.
+# HYPOTHESIS 2: Females lay together because the optimal clutch size is 
+# greater than the size of single female clutches regardless of hatch spread.
 # PREDICTION 2a: Larger clutches hatch more eggs 
 # PREDICTION 2b: Larger broods have more survivors
 # PREDICTION 2c: Larger clutches have greater hatching spread 
@@ -52,7 +52,6 @@ arrange(desc("nest_counts"))
 print(nest_counts)
 
 masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
-  filter(Exclusion == "GOOD") %>% # Keeping only Good nests that meet criteria
   mutate(Nest_ID                 = paste(Year, Nest_ID, sep = "_"), # Unique Nest ID 
          Hatch_success           = as.numeric(Hatched_eggs)/as.numeric(Clutch_size), 
          Survived_2_cons         = ifelse(is.na(Survived_2), 0, Survived_2), 
@@ -155,7 +154,8 @@ longer_data <- masterlist_data %>%
   pivot_longer(cols = c(Hatched_eggs, Hatch_success, Survived_2_cons),
                names_to = "Data",
                values_to = "Value") %>%
-  mutate(converted_from_na = ifelse(Data == "Survived_2_cons", converted_from_na, FALSE))
+  mutate(converted_from_na = ifelse(Data == "Survived_2_cons", 
+                                    converted_from_na, FALSE))
 
 
 
@@ -445,41 +445,254 @@ summary(model_a)
 # the inclusive fitness of the dominant female compared to hypothetical 
 # prolonged laying of a similar sized clutch by a single female.
 
-# PREDICTION A: Synch nests have greater hatching success than Asynch nests 
-# as there are fewer eggs deserted in the nest after hatching. 
-# PREDICTION B: Synch nests have greater survival than Asynch nests as there 
-# are fewer late hatching chicks with poorer survival chances. 
+# PREDICTION A: Synchronous nests have greater hatching success than 
+# Asynchronous nests as there are fewer eggs deserted in the nest after hatching. 
+# PREDICTION B: Synchronous nests have greater survival than Asynchronous nests 
+# as there are fewer late hatching chicks with poorer survival chances. 
 
 #### DATA FILTERING AND ORGANIZATION #### 
 # Nests 2018_E, 2018_AD, 2018_AZ, 2018_BD were not manipulated and thus excluded. 
 # Nest 2024_W predated during hatching, also excluded. 
-experiment_data <- read_excel("Compiled_synchrony_experiment_data.xlsx")  %>%
+experiment_data <- read_excel("Compiled_synchrony_experiment_data.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest, sep = "_")) %>%
-  group_by(Nest_ID, Final_manipulated_clutch) %>%
-  mutate(Hatch_success = sum(Hatched, na.rm = TRUE) / Manipulated_clutch_size) %>%
-  filter(!Treatment %in% c("Control", "Other")) %>%
-  filter(! Nest_ID %in% c("2018_E", "2018_AD", "2018_AZ", "2018_BD", "2024_W")) %>%
-  mutate(Foreign_percentage = Foreign_eggs/Manipulated_clutch_size) %>%
-  mutate(Treatment = recode(Treatment,
-                            "Synch" = "Synchronous",
-                            "Asynch" = "Asynchronous")) %>%
-  ungroup() 
+  filter(!Treatment %in% c("Control","Other")) %>%
+  filter(!Nest_ID %in% c("2018_E","2018_AD","2018_AZ","2018_BD","2024_W")) %>%  
+  mutate(Treatment = recode(Treatment, "Synch" = "Synchronous",
+                                       "Asynch" = "Asynchronous"), 
+         Hatch_success = (Hatched/Manipulated_clutch_size), 
+         Foreign_percentage = (Foreign_eggs/Manipulated_clutch_size))
 
-# Further cleaning up the data set with successful nests
-successful_nests <- experiment_data %>% filter(Hatch_success >0) %>%
-  mutate(Hatch_begin = as.Date(Hatch_begin), Date_found = as.Date(Date_found), 
+# Further cleaning of the data set with successful nests
+successful_nests <- experiment_data %>% 
+  filter(Hatch_success >0) %>%
+  mutate(Date_found = as.Date(Date_found),
+         Hatch_begin = as.Date(Hatch_begin), 
          Observed_nesting_period = as.numeric(Hatch_begin - Date_found)) %>%
-  mutate(Hatch_begin = as.Date(Hatch_begin), Date_transfer = as.Date(Date_transfer),
-    Transfered_time = as.numeric(Hatch_begin - Date_transfer)) %>%
-  mutate(Estimated_hatch_spread = as.numeric(Estimated_hatch_spread)) %>%
-  mutate(True_hatch_spread = as.numeric(True_hatch_spread))
+  mutate(Date_transfer = as.Date(Date_transfer),
+         Transfered_time = as.numeric(Hatch_begin - Date_transfer)) %>%
+  mutate(Estimated_hatch_spread = as.numeric(Estimated_hatch_spread),
+         True_hatch_spread = as.numeric(True_hatch_spread))
+
+# Function to pivot data longer for both the full experiment data set and the 
+# successful nests data set, then give summary statistics. 
+
+# Function to pivot data long
+pivot_data_long <- function(df, dataset_name = NA) {
+  df %>%
+    pivot_longer(
+      cols = where(is.numeric) & !all_of("Year"),
+      names_to = "Variable",
+      values_to = "Value"
+    ) %>%
+    mutate(Source = dataset_name)}
+
+pivot_data_long(experiment_data, "experiment")
+View(pivot_data_long)
+
+# Function to summarize pivoted data
+summarize_data <- function(df_long) {
+  df_long %>%
+    group_by(Treatment, Variable) %>%
+    summarise(
+      n = n(),
+      min = min(Value, na.rm = TRUE),
+      max = max(Value, na.rm = TRUE),
+      mean = mean(Value, na.rm = TRUE),
+      sd = sd(Value, na.rm = TRUE),
+      se = sd / sqrt(n),
+      .groups = "drop"
+    )
+}
+
+
+
+
+
+
+
+
+summarize_experiment_data <- function(df, dataset_name = NA) {
+  df_long <- df %>%
+    pivot_longer(
+      cols = where(is.numeric) & !all_of("Year"),
+      names_to = "Variable",
+      values_to = "Value"
+    ) %>%
+    mutate(Source = dataset_name)
+  
+  df_summary <- df_long %>%
+    group_by(Treatment, Variable) %>%
+    summarise(
+      n = n(),
+      min = min(Value, na.rm = TRUE),
+      max = max(Value, na.rm = TRUE),
+      mean = mean(Value, na.rm = TRUE),
+      sd = sd(Value, na.rm = TRUE),
+      se = sd / sqrt(n),
+      .groups = "drop"
+    )
+  
+  # Return both quietly
+  list(long = df_long, summary = df_summary)
+}
+
+result <- summarize_experiment_data(experiment_data, "experiment")
+
+# View or print what you want
+print(result$long, n = 30)
+print(result$summary, n = 30)
+
+# Or interactively:
+View(result$long)
+View(result$summary)
+
+
+
+
+
+
+summarize_experiment_data <- function(df, dataset_name = NA) {
+  # Pivot data to long format
+  df_long <- df %>%
+    pivot_longer(
+      cols = where(is.numeric) & !all_of("Year"),
+      names_to = "Variable",
+      values_to = "Value"
+    ) %>%
+    mutate(Source = dataset_name)
+  
+  # Print the pivoted data
+  cat("\nPivoted (long) data for:", dataset_name, "\n")
+  print(df_long, n = Inf)
+  
+  # Summarize the data
+  df_summary <- df_long %>%
+    group_by(Treatment, Variable) %>%
+    summarise(
+      n = n(),
+      min = min(Value, na.rm = TRUE),
+      max = max(Value, na.rm = TRUE),
+      mean = mean(Value, na.rm = TRUE),
+      sd = sd(Value, na.rm = TRUE),
+      se = sd / sqrt(n),
+      .groups = "drop"
+    )
+  
+  # Print the summary
+  cat("\nSummary data for:", dataset_name, "\n")
+  print(df_summary, n = Inf)
+  
+  # Return both
+  return(list(long = df_long, summary = df_summary))
+}
+
+result1 <- summarize_experiment_data(experiment_data, "experiment")
+print(result1$long, n = 30)
+print(result1$summary, n = 30)
+result <- summarize_experiment_data(experiment_data, "experiment")
+result <- summarize_experiment_data(experiment_data, "experiment")
+
+print(result)
+
+summarize_experiment_data
+
+
+
+summarize_experiment_data <- function(df, dataset_name = NA) {
+  df_long <- df %>%
+    pivot_longer(
+    cols = where(is.numeric) & !all_of("Year"),
+    names_to = "Variable",
+    values_to = "Value") %>%
+    mutate(Source = dataset_name)
+
+  df_summary <- df_long %>%
+    group_by(Treatment, Variable) %>%
+    summarise(
+      n = n(),
+      min = min(Value, na.rm = TRUE),
+      max = max(Value, na.rm = TRUE),
+      mean = mean(Value, na.rm = TRUE),
+      sd = sd(Value, na.rm = TRUE),
+      se = sd / sqrt(n),
+      .groups = "drop")
+  
+# Print summary
+  cat("\nSummary for:", dataset_name, "\n")
+  print(df_summary, n = 30)
+  
+  return(list(long = df_long, summary = df_summary))
+}
+
+summarize_experiment_data(experiment_data, "experiment")
+
+
+
+
+
+result2 <- summarize_experiment_data(successful_nests, "control")
+
+experiment_summary <- result1$summary
+
+control_data_long <- result2$long
+control_summary <- result2$summary
+
+
+
+
+
+
+
+
+
 
 # Nest data in pivoted longer format for faceted figure and summary stats.
-df_long <- successful_nests_HS %>%
+experiment_data_long <- experiment_data %>%
   pivot_longer(
     cols = where(is.numeric) & !all_of("Year"),
     names_to = "Variable",
     values_to = "Value")
+
+# Create a reusable summary function
+summarize_data <- function(df) {
+    df %>%
+    group_by(Treatment, Variable) %>%
+    summarise(
+      n = n(),
+      min = min(Value, na.rm = TRUE),
+      max = max(Value, na.rm = TRUE),
+      mean = mean(Value, na.rm = TRUE),
+      sd = sd(Value, na.rm = TRUE),
+      se = sd / sqrt(n),
+      .groups = "drop")}
+
+# Apply it to two different datasets
+summary1 <- summarize_data(df_long)
+print(summary1, n = 30)
+
+
+df_summary2 <- summarize_data(_df)
+
+# Print results
+print(df_summary1, n = 30)
+print(df_summary2, n = 30)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Summary numbers of sample size, min, max, mean, SD, and SE for variables.
 df_summary <- df_long %>%
