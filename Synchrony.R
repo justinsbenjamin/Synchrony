@@ -48,11 +48,14 @@ library(DHARMa)
 #### DATA FILTERING AND ORGANIZATION ####
 # Sample sizes of excluded and included groups
 nest_counts <- read_excel("Nests_masterlist.xlsx") %>%
-count(Exclusion, name = "nest_counts") %>%
-arrange(desc("nest_counts"))
+  count(Exclusion, name = "nest_counts") %>%
+  arrange(desc("nest_counts"))
+
 print(nest_counts)
 
-masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
+masterlist_data <- read_excel("Nests_masterlist.xlsx",
+                              ## BMB: is it OK to treat these all as NA?
+                              na = c("", "NO_RECORD", "MISSING")) %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%  
   filter(Exclusion == "GOOD" | Exclusion == "MISSING_HATCH_ORDER") %>%
   mutate(Hatch_success = as.numeric(Hatched_eggs)/as.numeric(Clutch_size), 
@@ -69,6 +72,9 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx") %>%
   mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2),
         converted_from_na = is.na(Survived_2))
 View(masterlist_data)
+
+
+
 
 #### HYPOTHESIS 1 ####
 # Dominant females lay synchronously with another female to increase 
@@ -100,9 +106,13 @@ ggplot(longer_data1, aes(x = Hatch_spread, y = Value, color = converted_from_na)
 
 #### PREDICTION 1a: Shorter HS have greater hatching success ####
 
-# Model analyzing the hatching rate by hatching spread. 
-# I don't know how to analyze this. Obviously I could do just the number of 
-# hatched eggs but then I think I'll need to add clutch size as a co-variate?
+## Model analyzing the hatching rate by hatching spread. 
+## I don't know how to analyze this. Obviously I could do just the number of 
+## hatched eggs but then I think I'll need to add clutch size as a co-variate?
+
+## BMB: it should be a binomial (or beta-binomial) model with clutch size as
+## the weight, i.e.
+## glmmmTMB(prop_survived ~ ..., weights = clutch_size, ...)
 
 #### PREDICTION 1b: Shorter HS have better survival ####
 
@@ -112,7 +122,12 @@ model_2_1b_cons <- glmmTMB(Survived_2_cons ~ Hatch_spread + (1|Year),
 check_model(model_2_1b_cons)
 res <- simulateResiduals(fittedModel = model_2_1b_cons, plot = TRUE)
 testDispersion(res)
-testZeroInflation(res) 
+testZeroInflation(res)
+## BMB: surprising that the heteroscedasticity in check_models homogeneity-of-variance
+## (scale-location) plot doesn't get flagged by DHARMa
+## I'm a little surprised at treating Survived_2_cons as Poisson rather than as
+##  something like a binomial.  Do you have the denominators (i.e., the total
+##  possible survivors for each case)?
 
 # Model analyzing survival by HS with liberal survival estimate
 lib_data <- masterlist_data %>%
@@ -175,6 +190,26 @@ check_model(model_2_2a)
 res <- simulateResiduals(fittedModel = model_2_2a, plot = TRUE)
 testDispersion(res)
 
+## BMB: I would suggest something like this ...
+bmb1 <- glmmTMB(Hatched_eggs/Clutch_size ~ Clutch_size + (1|Year),
+                weights = Clutch_size,
+                family = betabinomial, data = masterlist_data)
+check_model(bmb1)
+## BMB: the posterior predictive check is weird but I suspect that's something
+## wonky with what the package is doing, not a real problem with the model
+## It would be interesting/useful to dig in and see what's going on and/or post
+## a reproducible issue to whichever easystats package github site is relevant
+##
+## I think it can't handle the model when specified as proportion + weights --
+## yes, that's it ...
+performance::check_predictions(bmb1)
+
+## re-fit model with c(successes, failures) instead of prop + weights
+bmb2 <- update(bmb1, cbind(Hatched_eggs, Clutch_size -Hatched_eggs) ~ .,
+                weights = NULL)
+performance::check_predictions(bmb2)
+
+res <- simulateResiduals(bmb1, plot = TRUE)
 
 # PREDICTION 2b: More hatched eggs have more survivors regardless of hatch spread.
 
