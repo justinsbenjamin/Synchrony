@@ -17,6 +17,7 @@ library(rstatix)
 library(glmmTMB)
 library(effsize)
 library(DHARMa)
+library(broom.mixed)
 
 ############################
 ####      CHAPTER 2     ####
