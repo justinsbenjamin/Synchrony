@@ -19,6 +19,25 @@ library(effsize)
 library(DHARMa)
 library(broom.mixed)
 
+sample_data <- read_excel("Book1.xlsx") %>%
+  mutate(Date_found = as.Date(Date_found),
+         Hatch_begin = as.Date(Hatch_begin),
+         Hatch_end = as.Date(Hatch_end),
+         Last_observed = as.Date(Last_observed)) %>%
+  mutate(Hatch_success = (Hatched_eggs/Clutch_size*100), 
+         Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1)) %>%
+    mutate(Observed_nesting_period = if_else(
+        !is.na(Hatch_begin),
+        as.numeric(Hatch_begin - Date_found),
+        as.numeric(Last_observed - Date_found)))
+View(sample_data)
+
+ggplot(sample_data, aes(x = Observed_nesting_period, y = Hatch_success)) +
+  geom_point() +
+  theme_classic()
+
+
+
 ############################
 ####      CHAPTER 2     ####
 #### OBSERVATIONAL DATA ####
@@ -50,16 +69,40 @@ nest_counts <- read_excel("Nests_masterlist.xlsx") %>%
   arrange(desc("nest_counts"))
 print(nest_counts)
 
+observation_period_data <- read_excel("Nests_masterlist.xlsx") %>%
+  filter(Exclusion == "GOOD" | Exclusion == "MISSING_HATCH_ORDER" |
+         Exclusion == "FAILED") %>%
+  mutate(Date_found = as.Date(Date_found),
+         Hatch_begin = as.Date(Hatch_begin),
+         Hatch_end = as.Date(Hatch_end),
+         Last_observed = as.Date(Last_observed)) %>%
+  mutate(Hatch_success = (as.numeric(Hatched_eggs)/as.numeric(Clutch_size)*100), 
+         Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1)) %>%
+  mutate(Observed_nesting_period = if_else(
+    !is.na(Hatch_begin),
+    as.numeric(Hatch_begin - Date_found),
+    as.numeric(Last_observed - Date_found)))
+View(observation_period_data)
+
+ggplot(observation_period_data, aes(x = Observed_nesting_period, y = Hatch_success)) +
+  geom_jitter(width = 0.2, height = 0.5, alpha = 0.8) +
+  theme_classic()
+
+
+
+
+
 masterlist_data <- read_excel("Nests_masterlist.xlsx",
   na = c("", "NO_RECORD", "MISSING")) %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%  
   filter(Exclusion == "GOOD" | Exclusion == "MISSING_HATCH_ORDER") %>%
   mutate(Hatch_success = (as.numeric(Hatched_eggs)/as.numeric(Clutch_size)*100), 
          Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2), 
-         Hatch_begin = as.numeric(Hatch_begin),
-         Hatch_end = as.numeric(Hatch_end),
-         Hatch_spread = (Hatch_end - Hatch_begin + 1), 
-         Date_found = as.numeric(Date_found), 
+         Hatch_begin = as.Date(as.numeric(Hatch_begin)),
+         Hatch_end = as.Date(Hatch_end),
+         Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1), 
+         Date_found = as.Date(Date_found), 
+         Last_observed = as.Date(Last_observed), 
          Observed_nesting_period = as.numeric(Hatch_begin - Date_found)) %>%
   mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
          Hatch_begin, Hatch_end, Hatch_spread, Year), 
