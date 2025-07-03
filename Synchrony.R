@@ -19,25 +19,6 @@ library(effsize)
 library(DHARMa)
 library(broom.mixed)
 
-sample_data <- read_excel("Book1.xlsx") %>%
-  mutate(Date_found = as.Date(Date_found),
-         Hatch_begin = as.Date(Hatch_begin),
-         Hatch_end = as.Date(Hatch_end),
-         Last_observed = as.Date(Last_observed)) %>%
-  mutate(Hatch_success = (Hatched_eggs/Clutch_size*100), 
-         Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1)) %>%
-    mutate(Observed_nesting_period = if_else(
-        !is.na(Hatch_begin),
-        as.numeric(Hatch_begin - Date_found),
-        as.numeric(Last_observed - Date_found)))
-View(sample_data)
-
-ggplot(sample_data, aes(x = Observed_nesting_period, y = Hatch_success)) +
-  geom_point() +
-  theme_classic()
-
-
-
 ############################
 ####      CHAPTER 2     ####
 #### OBSERVATIONAL DATA ####
@@ -76,19 +57,27 @@ observation_period_data <- read_excel("Nests_masterlist.xlsx") %>%
          Hatch_begin = as.Date(Hatch_begin),
          Hatch_end = as.Date(Hatch_end),
          Last_observed = as.Date(Last_observed)) %>%
-  mutate(Hatch_success = (as.numeric(Hatched_eggs)/as.numeric(Clutch_size)*100), 
-         Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1)) %>%
+  mutate(Hatch_success = (as.numeric(Hatched_eggs)/as.numeric(Clutch_size)*100)) %>%
+  mutate(Hatch_spread = if_else(
+         !is.na(Hatch_begin), 
+          as.numeric(Hatch_end - Hatch_begin + 1), 0)) %>%
   mutate(Observed_nesting_period = if_else(
     !is.na(Hatch_begin),
     as.numeric(Hatch_begin - Date_found),
     as.numeric(Last_observed - Date_found)))
 View(observation_period_data)
 
-ggplot(observation_period_data, aes(x = Observed_nesting_period, y = Hatch_success)) +
+ggplot(observation_period_data, aes(x = Observed_nesting_period, y = Hatch_spread)) +
   geom_jitter(width = 0.2, height = 0.5, alpha = 0.8) +
   theme_classic()
 
+correlation <- cor(as.numeric(observation_period_data$Observed_nesting_period), 
+                   as.numeric(observation_period_data$Hatch_spread), method = 'pearson')
+correlation
 
+ggplot(observation_period_data, aes(x = Observed_nesting_period, y = as.numeric(Survived_2))) +
+  geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
+  theme_classic()
 
 
 
@@ -145,7 +134,8 @@ longer_data1 <- masterlist_data %>%
 # conservative and liberal estimates by HS and Clutch size. 
 figure1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
   geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
-  facet_grid(Data ~ Predictor, scales = "free", labeller = labeller(
+  facet_grid(Data ~ Predictor, scales = "free", 
+             labeller = labeller(
     Data = c(Hatched_eggs = "# of hatched eggs",
              Hatch_success = "Hatching rate (%)", 
              Survived_2 = "Liberal # of survivors",
@@ -158,12 +148,13 @@ figure1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(),
         strip.placement = "outside", 
-        strip.text = element_text(size = 8))
+        strip.text = element_text(size = 10))
 print(figure1)
 
 # Added colours to the NAs that were converted to 0s
 figure2 <- figure1 + aes(x = Predictor_value, y = Value, color = converted_from_na) +
-  scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black"))
+  scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black")) +
+  labs(x = NULL, y = NULL) 
 print(figure2)
 
 # Added a smoother function to see the distribution of the data. 
@@ -187,17 +178,19 @@ diagnostics(model_1)
 
 # Model analyzing proportion of survivors (conservative estimate) by clutch size and HS
 model_2 <- update(model1, formula = cbind(Survived_2_cons, Hatched_eggs - Survived_2_cons) ~ 
-                    Hatch_spread + Hatched_eggs + Clutch_size + (1|Year))
+                    Hatch_spread + Hatched_eggs + (1|Year))
 diagnostics(model_2)
+summary(model_2)
 
-# Model analyzing proportion of survivors (conservative estimate) by clutch size and HS
+# Model analyzing proportion of survivors (liberal estimate) by clutch size and HS
 lib_data <- masterlist_data %>% filter(!is.na(Survived_2))
 
 model_3 <- update(model_2, formula = cbind(Survived_2, 
                          Hatched_eggs - Survived_2) ~ Hatch_spread + Hatched_eggs
-                         + Clutch_size + (1|Year),
+                         + (1|Year),
                          data = lib_data)
 diagnostics(model_3)
+summary(model_3)
 
 #### HYPOTHESIS 3 
 
