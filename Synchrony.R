@@ -94,8 +94,8 @@ figure_3 <- figure1 +
 print(figure_3)
 
 # PREDICTION 1A: Shorter HS have better hatching success
-# PREDICTION 2A: Number of hatched eggs will increase with clutch size 
-# then begin to decrease when clutch is too large to support.
+# PREDICTION 2A: Number of hatched eggs increase with clutch size 
+# then decrease when clutch is too large. 
 
 # Model analyzing proportion of hatched egg by clutch size and HS
 model_1 <- glmmTMB(cbind(Hatched_eggs, Clutch_size - Hatched_eggs) ~ 
@@ -133,7 +133,6 @@ summary(model_3)
 # PREDICTION 2C: Larger clutches have larger hatch spreads
 correlation_a <- cor(as.numeric(masterlist_data$Hatch_spread), 
                    as.numeric(masterlist_data$Clutch_size), method = 'pearson')
-
 correlation_b <- cor(as.numeric(masterlist_data$Hatch_spread), 
                    as.numeric(masterlist_data$Hatched_eggs), method = 'pearson')
 correlation_a
@@ -164,12 +163,10 @@ ggplot(laying_data, aes(x = Known_lay_order, y = Hatch_order)) +
   geom_smooth(method = "lm", se = TRUE)
   
 correlation <- cor.test(as.numeric(laying_data$Known_lay_order), 
-                     as.numeric(laying_data$Hatch_order), method = 'pearson')
-correlation$estimate      # r
-correlation$conf.int      # 95 % CI
-correlation$p.value
+               as.numeric(laying_data$Hatch_order), method = 'pearson')
+print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
 
-ggplot(laying_clean, aes(x = Known_lay_order, y = Incubation_period)) +
+ggplot(laying_data, aes(x = Known_lay_order, y = Incubation_period)) +
   geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 1) +
   labs(y = "Observed nesting period (days)", x = "Laying order") +
   theme_classic() 
@@ -180,17 +177,26 @@ laying_clean <- laying_data %>%
   filter(n_dup == 1) %>% 
   select(-n_dup)
 
+break_pt <- 5        
+laying_clean <- within(laying_clean, {
+  lay_1to5  <- pmin(Known_lay_order, break_pt)
+  lay_over5 <- pmax(0, Known_lay_order - break_pt)})
+
+model_abc <- glmmTMB(Incubation_period ~ lay_1to5 + lay_over5, 
+                     family = compois(link = "log"), 
+                     data = laying_clean)
+diagnostics(model_abc)
+summary(model_abc)
+
 #### PREDICTION 3b: Earlier hatched eggs have greater survival
 
 chick_data <- read_excel("Final_Compiled_Chick_Data.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_"))
 
-chick_data$Clutch_size <- masterlist_data$Clutch_size[match(chick_data$Nest_ID,
-                                                      masterlist_data$Nest_ID)]
-chick_data$Hatch_spread <- masterlist_data$Hatch_spread[match(chick_data$Nest_ID, 
-                                                       masterlist_data$Nest_ID)]
-chick_data$Hatched_eggs <- masterlist_data$Hatched_eggs[match(chick_data$Nest_ID, 
-                                                        masterlist_data$Nest_ID)]
+cols <- c("Clutch_size", "Hatch_spread", "Hatched_eggs")
+idx  <- match(chick_data$Nest_ID, masterlist_data$Nest_ID)
+chick_data[cols] <- masterlist_data[idx, cols] 
+
 chick_data_survival <- chick_data %>%
   filter(!is.na(Survived) & Survived %in% c(0, 1)) %>%
   mutate(Survived = if (!is.numeric(Survived)) as.numeric(Survived) else Survived)
@@ -253,8 +259,7 @@ ggplot(chick_data_longer, aes(x = Hatch_order, y = Value)) +
   labs(x = "Hatch order", y = "Measurement") +
   theme_classic() +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
-  theme(strip.background = element_blank(),
-        strip.placement = "outside", 
+  theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 10))
 
 # Figure of survival by size at hatching 
@@ -265,9 +270,8 @@ chick_data_longer <- chick_data_longer %>%
 ggplot(chick_data_longer, aes(x = Value, y = as.character(Survived))) +
   geom_point(size = 2, alpha = 0.7) +
   facet_wrap(~Morphometrics, scales="free_x", labeller = labeller(
-  Morphometrics = c(Mass = "Mass (g)",
-                      Tarsus = "Left outer tarsus (mm)", 
-                      `Shield to Tip` = "Shield to tip (mm)"))) +
+  Morphometrics = c(Mass = "Mass (g)", Tarsus = "Left outer tarsus (mm)", 
+                    `Shield to Tip` = "Shield to tip (mm)"))) +
   labs(x = "Measurement", y = "Survived") +
   scale_x_continuous() +
   theme_classic() +
@@ -310,12 +314,11 @@ successful_nests_MT <- successful_nests %>%
   filter(Transfered_time > 0)
 
 # Function to pivot data long
-pivot_data_long <- function(df) {
-  df %>%
+pivot_data_long <- function(df) { df %>%
     pivot_longer(
-      cols = where(is.numeric) & !all_of("Year"),
-      names_to = "Variable",
-      values_to = "Value")}
+    cols = where(is.numeric) & !all_of("Year"),
+    names_to = "Variable",
+    values_to = "Value")}
 
 # Run pivoting long function 
 experiment_data_long <- pivot_data_long(experiment_data)
@@ -327,8 +330,7 @@ successful_nests_long_MT <- pivot_data_long(successful_nests_MT)
 summarize_data <- function(df_long) {
   df_long %>%
     group_by(Treatment, Variable) %>%
-    summarise(
-      n = n(),
+    summarise(n = n(),
       min = min(Value, na.rm = TRUE),
       max = max(Value, na.rm = TRUE),
       mean = mean(Value, na.rm = TRUE),
@@ -337,7 +339,7 @@ summarize_data <- function(df_long) {
       .groups = "drop")}
 
 summary_experiment_data <- summarize_data(experiment_data_long)
-summary_successful <- summarize_data(successful_nests_long)
+summary_successful_nests <- summarize_data(successful_nests_long)
 summary_successful_HS <- summarize_data(successful_nests_long_HS)
 summary_successful_MT <- summarize_data(successful_nests_long_MT)
 
@@ -345,52 +347,11 @@ lapply(list(summary_experiment_data, summary_successful,
             summary_successful_HS, summary_successful_MT), print, n = 30)
 
 #### T-TESTS analyzing the effectiveness of the experimental design ####
-
-# Analysis of difference in proportion of swapped eggs between treatments. 
-t.test(Foreign_percentage ~ Treatment, data = experiment_data)
-
-# Analysis of difference in final manipulated clutch size between treatments. 
-t.test(Manipulated_clutch_size ~ Treatment, data = experiment_data)
-
-# Analysis of difference in observed nesting period between treatments. 
-t.test(Observed_nesting_period ~ Treatment, data = successful_nests)
-
-# Hatch spread analysis adjusted to only include nests that hatched >1 egg. 
-t.test(True_hatch_spread ~ Treatment, data = successful_nests_HS)
-
-# Transferred time analysis adjusted to exclude nest that had egg manipulation
-# occur after hatching had begun.
-t.test(Transfered_time ~ Treatment, data = successful_nests_MT)
-
-# T-test analyzing difference in number of hatched eggs between treatments.
-t.test(Hatched ~ Treatment, data = successful_nests)
-
-# T-test analyzing difference in hatching success between treatments.
-
-
-# POWER ANALYSIS
-
-# Cohen's D effect size calculation
-cohens_d(Hatch_success ~ Treatment, data = successful_nests)
-
-# Hedge's G effect size calculation. This is better for my small sample size
-SynchHatch <- successful_nests$Hatch_success[successful_nests$Treatment == "Synchronous"]
-AsynchHatch <- successful_nests$Hatch_success[successful_nests$Treatment == "Asynchronous"]
-
-hedges_g <- cohen.d(AsynchHatch, SynchHatch, hedges.correction = TRUE)
-print(hedges_g)
-
-# Setting the parameters for power analysis
-alpha <- 0.05             # Significance level
-power <- 0.8              # Power
-effect_size <- hedges_g   # Hedge's G effect size  
-
-# Calculating sample size needed
-g_sample_size <- pwr.p.test(h = effect_size, sig.level = alpha, 
-                            power = power, alternative = "less")$n
-print(g_sample_size)
-
-# GLMMs on hatching success
+t.test(Foreign_percentage ~ Treatment, data = experiment_data) # proportion swapped eggs
+t.test(Manipulated_clutch_size ~ Treatment, data = experiment_data) # manipulated clutch size
+t.test(Observed_nesting_period ~ Treatment, data = successful_nests) # observed nesting period
+t.test(True_hatch_spread ~ Treatment, data = successful_nests_HS) # Hatch spread
+t.test(Transfered_time ~ Treatment, data = successful_nests_MT) # Transferred time
 
 # Model analyzing number of hatched eggs by clutch size
 model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
@@ -401,7 +362,7 @@ summary(model_1)
 
 # Model analyzing number of survivors by treatment.
 model_2 <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
-                     Treatment + Hatched + (1|Year), 
+                   Treatment + Hatched + (1|Year), 
                    family = betabinomial, data = successful_nests)
 diagnostics(model_2)
 summary(model_2)
