@@ -48,7 +48,7 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
          Hatch_begin, Hatch_end, Hatch_spread, Year), 
          ~ as.numeric(as.character(.)))) %>%
   mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2),
-        converted_from_na = is.na(Survived_2))
+        converted_na = is.na(Survived_2))
 
 # Pivoting data longer with two survival estimates
 # 1) Conservative estimate: When survival unknown, NAs converted to 0s.
@@ -63,8 +63,8 @@ longer_data1 <- masterlist_data %>%
                names_to = "Predictor", 
                values_to = "Predictor_value")
 
-# Figure of Hatch rate, Number of hatched eggs and Number of survivors with 
-# conservative and liberal estimates by HS and Clutch size. 
+# Figure of hatch rate, number of hatched eggs and number of survivors with 
+# conservative and liberal estimates by HS and clutch size. 
 figure_1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
   geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
   facet_grid(Data ~ Predictor, scales = "free", labeller = labeller(
@@ -93,13 +93,18 @@ figure_3 <- figure1 +
   geom_smooth(method = "loess") 
 print(figure_3)
 
+ggplot(masterlist_data, aes(x = Hatched_eggs, y = Survived_2)) +
+  geom_jitter(width = 0.2, height = 0.2, alpha = 0.8) +
+  theme_classic()
+
 # PREDICTION 1A: Shorter HS have better hatching success
 # PREDICTION 2A: Number of hatched eggs increase with clutch size 
 # then decrease when clutch is too large. 
-
+  
 # Model analyzing proportion of hatched egg by clutch size and HS
 model_1 <- glmmTMB(cbind(Hatched_eggs, Clutch_size - Hatched_eggs) ~ 
-                  Hatch_spread + Clutch_size + (1|Year), family = betabinomial,
+                  Hatch_spread + Clutch_size + 
+                  (1|Year), family = betabinomial,
                   data = masterlist_data)
 
 # Function to view model diagnostics 
@@ -110,14 +115,15 @@ testDispersion(res)
 testZeroInflation(res)}
 
 diagnostics(model_1)
+summary(model_1)
 
 # PREDICTION 1B: Shorter HS have better survival
 # PREDICTION 2B: Larger broods have more survivors. 
 
 # Model analyzing conservative estimate of survivors by clutch size and HS
 model_2 <- glmmTMB(cbind(Survived_2_cons, Hatched_eggs - Survived_2_cons) ~ 
-                   Hatch_spread + Hatched_eggs + (1|Year), family = betabinomial,
-                   data = masterlist_data)
+                   Hatch_spread + Hatched_eggs + Clutch_size + (1|Year), 
+                   family = betabinomial, data = masterlist_data)
 diagnostics(model_2)
 summary(model_2)
 
@@ -125,7 +131,8 @@ summary(model_2)
 lib_data <- masterlist_data %>% filter(!is.na(Survived_2))
 
 model_3 <- glmmTMB(cbind(Survived_2, Hatched_eggs - Survived_2) ~ 
-                   Hatch_spread + Hatched_eggs + (1|Year), family = betabinomial,
+                   Hatch_spread + Hatched_eggs + Clutch_size + (1|Year), 
+                   family = betabinomial,
                    data = lib_data)
 diagnostics(model_3)
 summary(model_3)
@@ -166,7 +173,7 @@ correlation <- cor.test(as.numeric(laying_data$Known_lay_order),
                as.numeric(laying_data$Hatch_order), method = 'pearson')
 print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
 
-ggplot(laying_data, aes(x = Known_lay_order, y = Incubation_period)) +
+ggplot(laying_clean, aes(x = Known_lay_order, y = Incubation_period)) +
   geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 1) +
   labs(y = "Observed nesting period (days)", x = "Laying order") +
   theme_classic() 
@@ -183,15 +190,15 @@ laying_clean <- within(laying_clean, {
   lay_over5 <- pmax(0, Known_lay_order - break_pt)})
 
 model_abc <- glmmTMB(Incubation_period ~ lay_1to5 + lay_over5, 
-                     family = compois(link = "log"), 
-                     data = laying_clean)
+                     family = compois(link = "log"), data = laying_clean)
 diagnostics(model_abc)
 summary(model_abc)
 
 #### PREDICTION 3b: Earlier hatched eggs have greater survival
 
 chick_data <- read_excel("Final_Compiled_Chick_Data.xlsx") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_"))
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
+  mutate("Shield to Tip" = "S")
 
 cols <- c("Clutch_size", "Hatch_spread", "Hatched_eggs")
 idx  <- match(chick_data$Nest_ID, masterlist_data$Nest_ID)
@@ -221,19 +228,41 @@ diagnostics(model_2_3a)
 summary(model_2_3a)
 
 # Model with interaction between hatch order and hatching spread
-model_2_3c <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Hatch_spread + Mass +
+model_2_3c <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Hatch_spread +
                      (1|Nest_ID) + (1|Year), family = binomial, data = chick_data_survival)
 diagnostics(model_2_3c)
 summary(model_2_3c)
 
-# Model with interaction between hatch order and hatching spread
+# PREDICTION 3c: Last hatched eggs are smaller as they spend more developmental
+# energy catching up to early hatching chicks. 
+
 model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Mass + 
                         (1|Nest_ID) + (1|Year), family = binomial, data = chick_data_survival)
 diagnostics(model_2_3d)
 summary(model_2_3d)
 
-# PREDICTION 3c: Last hatched eggs are smaller as they spend more developmental
-# energy catching up to early hatching chicks. 
+# Pivoting data longer then filtering out data that has unusually large birds
+# (likely typos or issues with the measurements and potential recaptures). 
+chick_data_morph <- chick_data %>%
+  filter(!Mass > 35) &
+      !(`Shield to Tip` > 24)  &
+      !(Tarsus > 40) %>%
+  filter("Tarsus" %in% Year < 2019)
+
+model_mass <- glmmTMB(Mass ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
+                      family = poisson, data = chick_data_survival)
+diagnostics(model_mass)
+summary(model_mass)
+
+model_StoT <- glmmTMB(StoT ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
+                      family = gausssian, data = chick_data_survival)
+diagnostics(model_StoT)
+summary(model_StoT)
+
+model_Tars <- glmmTMB(Tarsus ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
+                      family = gaussian, data = chick_data_survival)
+diagnostics(model_Tars)
+summary(model_Tars)
 
 # Pivoting data longer then filtering out data that has unusually large birds
 # (likely typos or issues with the measurements and potential recaptures). 
@@ -244,8 +273,8 @@ chick_data_longer <- chick_data %>%
                values_to = 'Value') %>%
   filter(!is.na(Value)) %>%
   filter(!(Morphometrics == "Mass" & (Value > 35)) &
-      !(Morphometrics == "Shield to Tip" & (Value > 24))  &
-      !(Morphometrics == "Tarsus" & Year < 2019)) %>%
+           !(Morphometrics == "Shield to Tip" & (Value > 24))  &
+           !(Morphometrics == "Tarsus" & Year < 2019)) %>%
   filter(!(Morphometrics == "Tarsus" & Value > 40))
 
 # Figure of chick size by hatch order
