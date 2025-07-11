@@ -19,6 +19,7 @@ library(effsize)
 library(DHARMa)
 library(broom.mixed)
 library(simr)
+library(nlme)
 
 ############################
 ####      CHAPTER 2     ####
@@ -37,6 +38,7 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
   filter(Exclusion == "GOOD" | Exclusion == "MISSING_HATCH_ORDER") %>%
   mutate(Hatch_success = (as.numeric(Hatched_eggs)/as.numeric(Clutch_size)*100), 
          Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2), 
+         Survived_1_cons = ifelse(is.na(Survived_1), 0, Survived_1), 
          Hatch_begin = as.Date(Hatch_begin),
          Hatch_end = as.Date(Hatch_end),
          Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1),
@@ -47,17 +49,22 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
   mutate(across(c(Clutch_size, Hatched_eggs, Survived_2, Survived_2_cons,
          Hatch_begin, Hatch_end, Hatch_spread, Year), 
          ~ as.numeric(as.character(.)))) %>%
+  mutate(Survived_1_cons = ifelse(is.na(Survived_1), 0, Survived_1),
+        converted_na_1 = is.na(Survived_1)) %>%
   mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2),
-        converted_na = is.na(Survived_2)) %>%
+         converted_na = is.na(Survived_2)) %>%
   mutate(relative_survive_success = (Survived_2/(Hatched_eggs)*100)) %>%
-  mutate(survive_success = (Survived_2/(Clutch_size)*100))
+  mutate(survive_success = (Survived_2/(Clutch_size)*100)) %>%
+  mutate(relative_survive_success_1 = (Survived_1/(Hatched_eggs)*100)) %>%
+  mutate(survive_success_1 = (Survived_1/(Clutch_size)*100))
 
 # Pivoting data longer with two survival estimates
 # 1) Conservative estimate: When survival unknown, NAs converted to 0s.
 # 2) Liberal estimate: NAs were removed. 
 longer_data1 <- masterlist_data %>%
   pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
-                        'Survived_2', 'Survived_2_cons', 'survive_success'), 
+                        'Survived_2', 'Survived_2_cons', 'survive_success', 
+                        'Survived_1', 'Survived_1_cons', 'survive_success_1'), 
                names_to = 'Data', 
                values_to = 'Value') %>%
   mutate(converted_na = ifelse(Data == "Survived_2_cons", converted_na, FALSE))%>%
@@ -72,9 +79,12 @@ figure_1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
   facet_grid(Data ~ Predictor, scales = "free", labeller = labeller(
   Data = c(Hatched_eggs = "# of hatched eggs",
              Hatch_success = "Hatching rate (%)", 
-             Survived_2 = "Liberal # of survivors",
-             Survived_2_cons = "Conservative # of survivors", 
-             survive_success = "Proportion clutch survived"), 
+             Survived_2 = "Liberal #\nof survivors",
+             Survived_2_cons = "Conservative #\nof survivors", 
+             survive_success = "Proportion clutch\nsurvived", 
+             Survived_1 = "Lib # survivors 30 days", 
+             Survived_1_cons = "Cons # survivors 30 days", 
+             survive_success_1 = "Proportion survived 30"), 
   Predictor = c(Clutch_size = "Clutch size", 
                 Hatch_spread = "Hatch spread (days)")), switch = "both") +
   theme_classic() +
@@ -92,7 +102,7 @@ figure_2 <- figure1 + aes(x = Predictor_value, y = Value, color = converted_na) 
 print(figure_2)
 
 # Added a smoother function to see the distribution of the data. 
-figure_3 <- figure1 +
+figure_3 <- figure_1 +
   geom_smooth(method = "loess") 
 print(figure_3)
 
@@ -177,38 +187,77 @@ correlation <- cor.test(as.numeric(laying_data$Known_lay_order),
                as.numeric(laying_data$Hatch_order), method = 'pearson')
 print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
 
-ggplot(laying_clean, aes(x = Known_lay_order, y = Incubation_period)) +
+ggplot(laying_data, aes(x = Known_lay_order, y = Incubation_period)) +
   geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 1) +
   labs(y = "Observed nesting period (days)", x = "Laying order") +
   theme_classic() 
 
-laying_clean <- laying_data %>% 
-  mutate(Date = as.Date(Date)) %>%
-  add_count(Nest_ID, Date, Known_lay_order, name = "n_dup") %>% 
-  filter(n_dup == 1) %>% 
-  select(-n_dup)
+nlme_model <- nlme(Incubation_period ~ a * exp(-b * Known_lay_order),
+                   data = laying_data,
+                   fixed = a + b ~ 1,
+                   random = a ~ 1 | Nest_ID,
+                   start = c(a = 1, b = 0.03))
+diagnostics(nlme_model)
+summary(nlme_model)
 
-break_pt <- 5        
-laying_clean <- within(laying_clean, {
-  lay_1to5  <- pmin(Known_lay_order, break_pt)
-  lay_over5 <- pmax(0, Known_lay_order - break_pt)})
+plot(nlme_model, resid(., type = "pearson") ~ fitted(.), abline = 0)
+hist(residuals(nlme_model), breaks = 30, main = "Residuals", xlab = "Residuals")
+qqnorm(resid(nlme_model))
+qqline(resid(nlme_model))
 
-model_abc <- glmmTMB(Incubation_period ~ lay_1to5 + lay_over5 + (1|Nest_ID), 
-                     family = compois(link = "log"), data = laying_clean)
-diagnostics(model_abc)
-summary(model_abc)
 
 #### PREDICTION 3b: Earlier hatched eggs have greater survival
 
 # Filtering out data that has unusually large birds
 # (likely typos or issues with the measurements or recaptures). 
 chick_data <- read_excel("Final_Compiled_Chick_Data.xlsx") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  filter(!(Mass > 35 | Tarsus > 40 | Shield_to_tip > 24))
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_"))
 
 cols <- c("Clutch_size", "Hatch_spread", "Hatched_eggs")
 idx  <- match(chick_data$Nest_ID, masterlist_data$Nest_ID)
 chick_data[cols] <- masterlist_data[idx, cols] 
+
+chick_data <- chick_data %>%
+  filter(!(Mass > 35 | Tarsus > 40 | Shield_to_tip > 24))
+
+# Pivoting data longer then filtering out data that has unusually large birds
+# (likely typos or issues with the measurements and potential recaptures). 
+chick_data_longer <- chick_data %>%
+  pivot_longer(cols = c('Mass', 'Tarsus',
+                        'Shield_to_tip'), 
+               names_to = 'Morphometrics', 
+               values_to = 'Value') %>%
+  filter(!is.na(Value)) %>%
+  filter(!(Morphometrics == "Tarsus" & Year < 2019))
+
+int_breaks_5 <- function(x) {
+  rng <- range(x, na.rm = TRUE)
+  seq(from = floor(rng[1]), to = ceiling(rng[2]), length.out = 5) |> unique()
+}
+
+# Figure of chick size by hatch order
+ggplot(chick_data_longer, aes(x = Hatch_Day, y = Value)) +
+  geom_jitter(width = 0.04, height = 0.1, size = 1, alpha = 0.7) +
+  facet_wrap(~Morphometrics, scales="free_y", ncol = 1, strip.position = "left",
+             labeller = labeller(
+               Morphometrics = c(Mass = "Mass (g)",
+                                 Tarsus = "Left outer\ntarsus (mm)", 
+                                 Shield_to_tip = "Shield to\ntip (mm)"))) +
+  labs(x = "Hatch day", y = NULL) +
+  scale_x_continuous(breaks = seq(1, 12, 1)) +
+  scale_y_continuous(breaks = int_breaks_5,
+                     labels = scales::number_format(accuracy = 1)) +
+  theme_classic() +
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
+  theme(strip.background = element_blank(), strip.placement = "outside", 
+        strip.text = element_text(size = 11))
+
+
+
+
+
+
+
 
 chick_data_survival <- chick_data %>%
   filter(!is.na(Survived) & Survived %in% c(0, 1)) %>%
@@ -295,6 +344,9 @@ ggplot(chick_data_longer, aes(x = Hatch_order, y = Value)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 11))
 
+
+
+
 # Figure of survival by size at hatching 
 chick_data_longer <- chick_data_longer %>%
   filter(!is.na(Survived)) %>%
@@ -313,6 +365,18 @@ ggplot(chick_data_longer, aes(x = Survived, y = Value)) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 11))
+
+
+
+
+
+
+
+
+
+
+
+
 
 ##############################
 ####      CHAPTER 3       ####
