@@ -48,17 +48,19 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
          Hatch_begin, Hatch_end, Hatch_spread, Year), 
          ~ as.numeric(as.character(.)))) %>%
   mutate(Survived_2_cons = ifelse(is.na(Survived_2), 0, Survived_2),
-        converted_na = is.na(Survived_2))
+        converted_na = is.na(Survived_2)) %>%
+  mutate(relative_survive_success = (Survived_2/(Hatched_eggs)*100)) %>%
+  mutate(survive_success = (Survived_2/(Clutch_size)*100))
 
 # Pivoting data longer with two survival estimates
 # 1) Conservative estimate: When survival unknown, NAs converted to 0s.
 # 2) Liberal estimate: NAs were removed. 
 longer_data1 <- masterlist_data %>%
   pivot_longer(cols = c('Hatched_eggs', 'Hatch_success',
-                        'Survived_2', 'Survived_2_cons'), 
+                        'Survived_2', 'Survived_2_cons', 'survive_success'), 
                names_to = 'Data', 
                values_to = 'Value') %>%
-  mutate(converted_na = ifelse(Data == "Survived_2_cons", converted_na, FALSE)) %>%
+  mutate(converted_na = ifelse(Data == "Survived_2_cons", converted_na, FALSE))%>%
   pivot_longer(cols = c("Hatch_spread", "Clutch_size"), 
                names_to = "Predictor", 
                values_to = "Predictor_value")
@@ -71,7 +73,8 @@ figure_1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
   Data = c(Hatched_eggs = "# of hatched eggs",
              Hatch_success = "Hatching rate (%)", 
              Survived_2 = "Liberal # of survivors",
-             Survived_2_cons = "Conservative # of survivors"), 
+             Survived_2_cons = "Conservative # of survivors", 
+             survive_success = "Proportion clutch survived"), 
   Predictor = c(Clutch_size = "Clutch size", 
                 Hatch_spread = "Hatch spread (days)")), switch = "both") +
   theme_classic() +
@@ -79,7 +82,7 @@ figure_1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
   labs(x = NULL, y = NULL) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
-        strip.text = element_text(size = 10))
+        strip.text = element_text(size = 6))
 print(figure_1)
 
 # Added colours to the NAs that were converted to 0s
@@ -103,7 +106,7 @@ ggplot(masterlist_data, aes(x = Hatched_eggs, y = Survived_2)) +
   
 # Model analyzing proportion of hatched egg by clutch size and HS
 model_1 <- glmmTMB(cbind(Hatched_eggs, Clutch_size - Hatched_eggs) ~ 
-                  Hatch_spread + Clutch_size + 
+                  Hatch_spread + Clutch_size + Females +
                   (1|Year), family = betabinomial,
                   data = masterlist_data)
 
@@ -122,7 +125,7 @@ summary(model_1)
 
 # Model analyzing conservative estimate of survivors by clutch size and HS
 model_2 <- glmmTMB(cbind(Survived_2_cons, Hatched_eggs - Survived_2_cons) ~ 
-                   Hatch_spread + Hatched_eggs + Clutch_size + (1|Year), 
+                   Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
                    family = betabinomial, data = masterlist_data)
 diagnostics(model_2)
 summary(model_2)
@@ -131,7 +134,7 @@ summary(model_2)
 lib_data <- masterlist_data %>% filter(!is.na(Survived_2))
 
 model_3 <- glmmTMB(cbind(Survived_2, Hatched_eggs - Survived_2) ~ 
-                   Hatch_spread + Hatched_eggs + Clutch_size + (1|Year), 
+                   Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
                    family = betabinomial,
                    data = lib_data)
 diagnostics(model_3)
@@ -161,6 +164,7 @@ laying_data <- read_excel("Lay_hatch_data.xlsx") %>%
 
 laying_data <- laying_data %>%
   filter(Known_lay_order < 10)
+
 ggplot(laying_data, aes(x = Known_lay_order, y = Hatch_order)) +
   geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 0.7) +
   labs(y = "Hatch order", x = "Lay order") +
@@ -189,16 +193,18 @@ laying_clean <- within(laying_clean, {
   lay_1to5  <- pmin(Known_lay_order, break_pt)
   lay_over5 <- pmax(0, Known_lay_order - break_pt)})
 
-model_abc <- glmmTMB(Incubation_period ~ lay_1to5 + lay_over5, 
+model_abc <- glmmTMB(Incubation_period ~ lay_1to5 + lay_over5 + (1|Nest_ID), 
                      family = compois(link = "log"), data = laying_clean)
 diagnostics(model_abc)
 summary(model_abc)
 
 #### PREDICTION 3b: Earlier hatched eggs have greater survival
 
+# Filtering out data that has unusually large birds
+# (likely typos or issues with the measurements or recaptures). 
 chick_data <- read_excel("Final_Compiled_Chick_Data.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  mutate("Shield to Tip" = "S")
+  filter(!(Mass > 35 | Tarsus > 40 | Shield_to_tip > 24))
 
 cols <- c("Clutch_size", "Hatch_spread", "Hatched_eggs")
 idx  <- match(chick_data$Nest_ID, masterlist_data$Nest_ID)
@@ -236,80 +242,123 @@ summary(model_2_3c)
 # PREDICTION 3c: Last hatched eggs are smaller as they spend more developmental
 # energy catching up to early hatching chicks. 
 
+clean_data <- chick_data %>% 
+  filter(abs(Mass - round(Mass)) < .Machine$double.eps^0.5)
+
+model_mass <- glmmTMB(Mass ~ Hatch_order + (1|Nest_ID) + (1|Year), 
+                      family = nbinom1, data = clean_data)
+diagnostics(model_mass)
+summary(model_mass)
+
+model_StoT <- glmmTMB(Shield_to_tip ~ as.numeric(Hatch_order) + (1|Nest_ID) +
+                      (1|Year), family = gaussian, data = clean_data)
+diagnostics(model_StoT)
+summary(model_StoT)
+
+tars_data <- chick_data %>%
+  filter(!(Year < 2019))
+
+model_Tars <- glmmTMB(Tarsus ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
+                      family = gaussian, data = tars_data)
+diagnostics(model_Tars)
+summary(model_Tars)
+
 model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Mass + 
-                        (1|Nest_ID) + (1|Year), family = binomial, data = chick_data_survival)
+                     (1|Nest_ID) + (1|Year), family = binomial, 
+                      data = chick_data_survival)
 diagnostics(model_2_3d)
 summary(model_2_3d)
 
 # Pivoting data longer then filtering out data that has unusually large birds
 # (likely typos or issues with the measurements and potential recaptures). 
-chick_data_morph <- chick_data %>%
-  filter(!Mass > 35) &
-      !(`Shield to Tip` > 24)  &
-      !(Tarsus > 40) %>%
-  filter("Tarsus" %in% Year < 2019)
-
-model_mass <- glmmTMB(Mass ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
-                      family = poisson, data = chick_data_survival)
-diagnostics(model_mass)
-summary(model_mass)
-
-model_StoT <- glmmTMB(StoT ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
-                      family = gausssian, data = chick_data_survival)
-diagnostics(model_StoT)
-summary(model_StoT)
-
-model_Tars <- glmmTMB(Tarsus ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year), 
-                      family = gaussian, data = chick_data_survival)
-diagnostics(model_Tars)
-summary(model_Tars)
-
-# Pivoting data longer then filtering out data that has unusually large birds
-# (likely typos or issues with the measurements and potential recaptures). 
 chick_data_longer <- chick_data %>%
   pivot_longer(cols = c('Mass', 'Tarsus',
-                        'Shield to Tip'), 
+                        'Shield_to_tip'), 
                names_to = 'Morphometrics', 
                values_to = 'Value') %>%
   filter(!is.na(Value)) %>%
-  filter(!(Morphometrics == "Mass" & (Value > 35)) &
-           !(Morphometrics == "Shield to Tip" & (Value > 24))  &
-           !(Morphometrics == "Tarsus" & Year < 2019)) %>%
-  filter(!(Morphometrics == "Tarsus" & Value > 40))
+  filter(!(Morphometrics == "Tarsus" & Year < 2019))
+  
 
 # Figure of chick size by hatch order
 ggplot(chick_data_longer, aes(x = Hatch_order, y = Value)) +
-  geom_jitter(width = 0, height = 0, size = 2, alpha = 0.7) +
-  facet_wrap(~Morphometrics, scales="free_y", labeller = labeller(
+  geom_jitter(width = 0.04, height = 0.1, size = 1, alpha = 0.7) +
+  facet_wrap(~Morphometrics, scales="free_y", ncol = 1, strip.position = "left",
+             labeller = labeller(
     Morphometrics = c(Mass = "Mass (g)",
                       Tarsus = "Left outer tarsus (mm)", 
-                      `Shield to Tip` = "Shield to tip (mm)"))) +
-  scale_y_continuous() +
-  labs(x = "Hatch order", y = "Measurement") +
+                      Shield_to_tip = "Shield to tip (mm)"))) +
+  labs(x = "Hatch order", y = NULL) +
+  scale_x_continuous(breaks = seq(1, 10, 1)) +
   theme_classic() +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
-        strip.text = element_text(size = 10))
+        strip.text = element_text(size = 11))
 
 # Figure of survival by size at hatching 
 chick_data_longer <- chick_data_longer %>%
   filter(!is.na(Survived)) %>%
   filter(! Survived == "NA")
   
-ggplot(chick_data_longer, aes(x = Value, y = as.character(Survived))) +
+ggplot(chick_data_longer, aes(x = Survived, y = Value)) +
   geom_point(size = 2, alpha = 0.7) +
-  facet_wrap(~Morphometrics, scales="free_x", labeller = labeller(
+  facet_wrap(~Morphometrics, scales="free_y", ncol = 1, strip.position = "left",
+             labeller = labeller(
   Morphometrics = c(Mass = "Mass (g)", Tarsus = "Left outer tarsus (mm)", 
-                    `Shield to Tip` = "Shield to tip (mm)"))) +
-  labs(x = "Measurement", y = "Survived") +
-  scale_x_continuous() +
+                    Shield_to_tip = "Shield to tip (mm)"))) +
+  labs(x = NULL, y = NULL) +
+  scale_y_continuous() +
+  scale_x_discrete(labels = c("0" = "Died", "1" = "Survived")) +
   theme_classic() +
-  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5))
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
+  theme(strip.background = element_blank(), strip.placement = "outside", 
+        strip.text = element_text(size = 11))
 
 ##############################
 ####      CHAPTER 3       ####
 #### SYNCHRONY EXPERIMENT ####
 ##############################
+
+experiment_data_blaine <- read_excel("Compiled_synchrony_experiment_data.xlsx") %>%
+  mutate(Nest_ID = paste(Year, Nest, sep = "_")) %>%
+  filter(!Treatment %in% c("Control","Other")) %>%
+  filter(!Year %in% c("2023","2024")) %>%  
+  filter(!Nest %in% c("H", "AQ")) %>%
+  mutate(Treatment = recode(Treatment, "Synch" = "Synchronous",
+                            "Asynch" = "Asynchronous"), 
+         Hatch_success = (Hatched/Manipulated_clutch_size), 
+         Foreign_percentage = (Foreign_eggs/Manipulated_clutch_size))
+
+ggplot(experiment_data_blaine, aes(x = Treatment, y = Hatch_success)) +
+  geom_boxplot() +
+  theme_classic() +
+  geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.7)
+
+# Hatching model from Blaine
+# (GLMM: n= 146 eggs from 19 nests; estimate=-0.49, 95% CI= (-0.86,-0.16), z1=-1.72, p=0.048).
+
+blaine_data_long <- experiment_data_blaine %>%
+  mutate(NonSurvivors = Hatched - Survival_60) %>% 
+  pivot_longer(cols = c(Survival_60, NonSurvivors), 
+               names_to = "Status", 
+               values_to = "Count") %>%
+  mutate(Survival_60 = ifelse(Status == "Survival_60", 1, 0)) %>%
+  uncount(Count) %>%
+  mutate(Treatment_survival = paste(Treatment, Survival_60, sep = "_")) 
+
+# (GLMM: n= 98 offspring from 19 nests; estimate=-0.176, 
+# 95% CI= (-0.32,-0.04), z1=-2.49, p=0.012).
+
+blaine_model_surv <- glmmTMB(Survival_60 ~ Treatment + (1|Nest), 
+                             family = binomial, data = blaine_data_long)
+diagnostics(blaine_model_surv)
+summary(blaine_model_surv)
+
+blaine_model_surv <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ Treatment, 
+                             family = betabinomial, data = blaine_data_long)
+diagnostics(blaine_model_surv)
+summary(blaine_model_surv)
+
 
 # Nests 2018_E, 2018_AD, 2018_AZ, 2018_BD were not manipulated and thus excluded. 
 # Nest 2024_W predated during hatching, also excluded. 
@@ -408,7 +457,10 @@ survival_data_long <- successful_nests %>%
 
 # Bar plot of survival data.
 ggplot(survival_data_long, aes(x = Treatment, fill=factor(Treatment_survival)))+
-  geom_bar(position = "dodge") +
+  geom_bar(position = position_dodge(width = 0.9)) +
+  geom_text(stat = "count", aes(label = ..count..), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.3, size = 4) +
   labs(x = "Treatment", y = "Count", fill = "Survived") +
   scale_fill_manual(values = c("Asynchronous_1" = "darkblue", 
                                "Asynchronous_0" = "blue", 
