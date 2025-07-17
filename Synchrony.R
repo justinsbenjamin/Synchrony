@@ -20,6 +20,7 @@ library(DHARMa)
 library(broom.mixed)
 library(simr)
 library(nlme)
+library(patchwork)  
 
 ############################
 ####      CHAPTER 2     ####
@@ -60,6 +61,562 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
   mutate(Converted_na_1_prop = is.na(Relative_survive_success_1), 
          Converted_na_2_prop = is.na(Relative_survive_success_2))
 
+
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+var_labels <- c(
+  Clutch_size = "Clutch size",
+  Hatched_eggs = "# Hatched eggs",
+  Hatch_spread = "Hatch spread (days)",
+  Survived_1 = "# Survived to 30 days",
+  Survived_2 = "# Survived to 60 days")
+
+# Invalids (y ~ x)
+invalid_pairs <- list(
+  c("Hatched_eggs", "Hatched_eggs"),
+  c("Hatched_eggs", "Hatch_spread"),
+  c("Hatched_eggs", "Survived_1"),
+  c("Hatch_spread", "Hatch_spread"),
+  c("Hatch_spread", "Survived_1"),
+  c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))}
+
+# Build each plot
+plots <- list()
+for (i in seq_along(y_vars)) {
+for (j in seq_along(x_vars)) {
+    y <- rev(y_vars)[i]  # bottom to top
+    x <- x_vars[j]
+    
+    if (is_invalid(y, x)) {
+      plots[[length(plots) + 1]] <- plot_spacer()} else {
+      show_x_title <- (i == length(y_vars))
+      show_y_title <- (j == 1)
+      
+      p <- ggplot(masterlist_data, aes_string(x = x, y = y)) +
+        geom_point(alpha = 0.6) +
+        xlab(var_labels[[x]]) +
+        ylab(var_labels[[y]]) +
+        theme_bw() +
+        theme(
+          panel.grid = element_blank(),
+          axis.title.x = if (show_x_title) element_text(size = 10) else element_blank(),
+          axis.title.y = if (show_y_title) element_text(size = 10) else element_blank(),
+          axis.text.x = if (show_x_title) element_text(size = 8) else element_blank(),
+          axis.text.y = if (show_y_title) element_text(size = 8) else element_blank(),
+          axis.ticks.x = if (show_x_title) element_line() else element_blank(),
+          axis.ticks.y = if (show_y_title) element_line() else element_blank(),
+          plot.margin = margin(2, 2, 2, 2))
+      plots[[length(plots) + 1]] <- p}}}
+
+layout_matrix <- matrix(1:16, nrow = 4, byrow = TRUE)
+
+# Final plot
+final_plot <- wrap_plots(plots, design = layout_matrix) 
+final_plot
+
+
+
+
+masterlist_data <- within(masterlist_data, {
+  Clutch_size   <- as.numeric(Clutch_size)
+  Hatched_eggs  <- as.numeric(Hatched_eggs)
+  Hatch_spread  <- as.numeric(Hatch_spread)
+  Survived_1   <- as.numeric(Survived_1)
+  Survived_2   <- as.numeric(Survived_2)})
+
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+var_labels <- c(Clutch_size = "Clutch size",
+                Hatched_eggs = "# Hatched eggs",
+                Hatch_spread = "Hatch spread (days)",
+                Survived_1 = "# Survived to 30 days",
+                Survived_2 = "# Survived to 60 days")
+
+invalid_pairs <- list(c("Hatched_eggs", "Hatched_eggs"),
+                      c("Hatched_eggs", "Hatch_spread"),
+                      c("Hatched_eggs", "Survived_1"),
+                      c("Hatch_spread", "Hatch_spread"),
+                      c("Hatch_spread", "Survived_1"),
+                      c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))}
+
+# Find bottom-most *valid* plot for each column
+valid_plot_positions <- expand.grid(
+  x = x_vars,
+  y = rev(y_vars),  # bottom-to-top
+  stringsAsFactors = FALSE)
+
+bottom_labels <- list()
+for (x in x_vars) {
+  for (y in valid_plot_positions$y[valid_plot_positions$x == x]) {
+    if (!is_invalid(y, x)) {
+      bottom_labels[[paste0(y, "_", x)]] <- TRUE
+      break}}}
+
+plot_cell <- function(xvar, yvar, show_x = FALSE, show_y = FALSE) {
+  x_data <- masterlist_data[[xvar]]
+  y_data <- masterlist_data[[yvar]]
+  
+  # Convert to numeric if needed
+  if (!is.numeric(x_data)) {
+    x_data <- suppressWarnings(as.numeric(as.character(x_data)))
+  }
+  if (!is.numeric(y_data)) {
+    y_data <- suppressWarnings(as.numeric(as.character(y_data)))
+  }
+  
+  # Remove NAs before calculating limits and breaks
+  x_data_noNA <- x_data[!is.na(x_data)]
+  y_data_noNA <- y_data[!is.na(y_data)]
+  
+  # Set default limits and breaks if no data remains
+  if (length(x_data_noNA) == 0) {
+    x_min <- 0; x_max <- 1; x_breaks <- 0:1
+  } else {
+    x_min <- floor(min(x_data_noNA))
+    x_max <- ceiling(max(x_data_noNA))
+    x_breaks <- seq(x_min, x_max, by = 1)
+  }
+  
+  if (length(y_data_noNA) == 0) {
+    y_min <- 0; y_max <- 1; y_breaks <- 0:1
+  } else {
+    y_min <- floor(min(y_data_noNA))
+    y_max <- ceiling(max(y_data_noNA))
+    y_breaks <- seq(y_min, y_max, by = 1)
+  }
+  ggplot(masterlist_data, aes_string(x = xvar, y = yvar)) +
+    geom_jitter(width = 0.2, height = 0.1, alpha = 0.8) +
+    xlab(if (show_x) var_labels[[xvar]] else NULL) +
+    ylab(if (show_y) var_labels[[yvar]] else NULL) +
+    scale_x_continuous(breaks = x_breaks, limits = c(x_min, x_max)) +
+    scale_y_continuous(breaks = y_breaks, limits = c(y_min, y_max)) +
+    theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      axis.text.x  = if (show_x) element_text(size = 8) else element_blank(),
+      axis.text.y  = if (show_y) element_text(size = 8) else element_blank(),
+      axis.ticks.x = if (show_x) element_line() else element_blank(),
+      axis.ticks.y = if (show_y) element_line() else element_blank(),
+      axis.title.x = if (show_x) element_text(size = 10) else element_blank(),
+      axis.title.y = if (show_y) element_text(size = 10) else element_blank(),
+      plot.margin = margin(2, 2, 2, 2))}
+
+plots <- list()
+for (y in rev(y_vars)) {
+  for (x in x_vars) {
+    if (is_invalid(y, x)) {
+      plots[[length(plots) + 1]] <- plot_spacer()
+    } else {
+      show_x <- (y == bottom_x_labels[[x]])
+      show_y <- (x == x_vars[1])
+      plots[[length(plots) + 1]] <- plot_cell(x, y, show_x, show_y)}}}
+
+final_plot <- wrap_plots(plots, ncol = 4) 
+final_plot
+
+
+
+
+
+
+
+
+
+
+
+#### This one kinda works 
+
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+var_labels <- c(Clutch_size = "Clutch size",
+                Hatched_eggs = "# Hatched eggs",
+                Hatch_spread = "Hatch spread (days)",
+                Survived_1 = "Survival to 30 days",
+                Survived_2 = "Survival to 60 days")
+
+invalid_pairs <- list(
+  c("Hatched_eggs", "Hatched_eggs"),
+  c("Hatched_eggs", "Hatch_spread"),
+  c("Hatched_eggs", "Survived_1"),
+  c("Hatch_spread", "Hatch_spread"),
+  c("Hatch_spread", "Survived_1"),
+  c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))}
+
+# Core plot function
+plot_cell <- function(xvar, yvar, show_x = FALSE, show_y = FALSE) {
+  ggplot(masterlist_data, aes_string(x = xvar, y = yvar)) +
+    geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
+    xlab(if (show_x) var_labels[[xvar]] else NULL) +
+    ylab(if (show_y) var_labels[[yvar]] else NULL) +
+    theme_bw() +
+    theme(
+      panel.grid = element_blank(),
+      axis.text.x  = if (show_x) element_text(size = 8) else element_blank(),
+      axis.text.y  = if (show_y) element_text(size = 8) else element_blank(),
+      axis.ticks.x = if (show_x) element_line() else element_blank(),
+      axis.ticks.y = if (show_y) element_line() else element_blank(),
+      axis.title.x = if (show_x) element_text(size = 10) else element_blank(),
+      axis.title.y = if (show_y) element_text(size = 10) else element_blank(),
+      plot.margin = margin(2, 2, 2, 2))}
+
+plot_dummy_xlab <- function(xvar) {ggplot() +
+    xlab(var_labels[[xvar]]) +
+    theme_void() +
+    theme(axis.title.x = element_text(size = 10),
+          plot.margin = margin(0, 0, 0, 0))}
+
+plots <- list()
+for (y in rev(y_vars)) {
+  for (x in x_vars) {
+    if (is_invalid(y, x)) {
+      plots[[length(plots) + 1]] <- plot_spacer()
+    } else {
+      show_x <- (y == y_vars[1])  # bottom row
+      show_y <- (x == x_vars[1])  # left column
+      plots[[length(plots) + 1]] <- plot_cell(x, y, show_x, show_y)}}}
+
+# Add dummy label-only row
+for (x in x_vars) {
+  plots[[length(plots) + 1]] <- plot_dummy_xlab(x)}
+
+# Layout matrix (5 rows: 4 main + 1 label row)
+layout_matrix <- matrix(1:20, nrow = 5, byrow = TRUE)
+
+# Final plot
+final_plot <- wrap_plots(plots, ncol = 4, heights = c(rep(1, 4), 0.2))
+final_plot
+
+
+
+
+
+
+
+
+
+
+
+
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+
+var_labels <- c(Clutch_size = "Clutch size",
+                Hatched_eggs = "# Hatched eggs",
+                Hatch_spread = "Hatch spread (days)",
+                Survived_1 = "Survival to 30 days",
+                Survived_2 = "Survival to 60 days")
+
+invalid_pairs <- list(
+  c("Hatched_eggs", "Hatched_eggs"),
+  c("Hatched_eggs", "Hatch_spread"),
+  c("Hatched_eggs", "Survived_1"),
+  c("Hatch_spread", "Hatch_spread"),
+  c("Hatch_spread", "Survived_1"),
+  c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))}
+
+# Plot builder
+plot_cell <- function(masterlist_data, xvar, yvar, show_x_title = FALSE, show_y_title = FALSE,
+                      show_x_text = FALSE, show_y_text = FALSE) {
+  ggplot(masterlist_data, aes_string(x = xvar, y = yvar)) +
+    geom_point(alpha = 0.6) +
+    theme_bw() +
+    xlab(var_labels[[xvar]]) +
+    ylab(var_labels[[yvar]]) +
+    theme(
+      panel.grid = element_blank(),
+      axis.title.x = if (show_x_title) element_text() else element_blank(),
+      axis.title.y = if (show_y_title) element_text() else element_blank(),
+      axis.text.x  = if (show_x_text) element_text() else element_blank(),
+      axis.text.y  = if (show_y_text) element_text() else element_blank(),
+      axis.ticks.x = if (show_x_text) element_line() else element_blank(),
+      axis.ticks.y = if (show_y_text) element_line() else element_blank(),
+      plot.margin = margin(2, 2, 2, 2))} 
+
+plot_list <- list()
+for (y in rev(y_vars)) {
+  for (x in x_vars) {
+    if (is_invalid(y, x)) {
+      plot_list <- append(plot_list, list(plot_spacer()))
+    } else {
+      plot_list <- append(plot_list, list(
+        plot_cell(
+          masterlist_data, x, y,
+          show_x_title = (y == y_vars[1]),
+          show_y_title = (x == x_vars[1]),
+          show_x_text = (y == y_vars[1]),
+          show_y_text = (x == x_vars[1]))))}}}
+
+final_plot <- wrap_plots(plot_list, ncol = 4, heights = rep(1, 4), widths = rep(1, 4)) 
+
+final_plot
+
+
+
+
+
+
+
+
+
+
+# Axis order
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+
+# Pretty labels
+var_labels <- c(
+  Clutch_size = "Clutch size",
+  Hatched_eggs = "# Hatched eggs",
+  Hatch_spread = "Hatch spread (days)",
+  Survived_1 = "Survival to 30 days",
+  Survived_2 = "Survival to 60 days"
+)
+
+# Invalid pairs (y ~ x)
+invalid_pairs <- list(
+  c("Hatched_eggs", "Hatched_eggs"),
+  c("Hatched_eggs", "Hatch_spread"),
+  c("Hatched_eggs", "Survived_1"),
+  c("Hatch_spread", "Hatch_spread"),
+  c("Hatch_spread", "Survived_1"),
+  c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))}
+
+# Plot function
+plot_cell <- function(masterlist_data, xvar, yvar, show_x_title = FALSE, show_y_title = FALSE,
+                      show_x_text = FALSE, show_y_text = FALSE) {
+  ggplot(masterlist_data, aes_string(x = xvar, y = yvar)) +
+    geom_point(alpha = 0.6) +
+    theme_bw() +
+    labs(x = if (show_x_title) var_labels[[xvar]] else NULL,
+         y = if (show_y_title) var_labels[[yvar]] else NULL) +
+    theme(
+      panel.grid = element_blank(),
+      axis.text.x = element_text(color = if (show_x_text) "black" else "transparent"),
+      axis.text.y = element_text(color = if (show_y_text) "black" else "transparent"),
+      axis.ticks.x = element_line(color = if (show_x_text) "black" else "transparent"),
+      axis.ticks.y = element_line(color = if (show_y_text) "black" else "transparent"),
+      plot.margin = margin(2, 2, 2, 2))}
+
+# Build the full grid
+plot_rows <- lapply(rev(y_vars), function(y) {
+  lapply(x_vars, function(x) {
+    if (is_invalid(y, x)) {
+      plot_spacer()
+    } else {plot_cell(
+        masterlist_data, x, y,
+        show_x_title = (y == y_vars[1]),
+        show_y_title = (x == x_vars[1]),
+        show_x_text = (y == y_vars[1]),
+        show_y_text = (x == x_vars[1]))}}) |> wrap_plots(nrow = 1)})
+
+# Combine rows into final figure
+final_plot <- wrap_plots(plot_rows, ncol = 1, guides = "collect")
+
+# Display
+final_plot 
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Panel layout
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+
+var_labels <- c(
+  Clutch_size = "Clutch size",
+  Hatched_eggs = "# Hatched eggs",
+  Hatch_spread = "Hatch spread (days)",
+  Survived_30 = "Survival to 30 days",
+  Survived_60 = "Survival to 60 days")
+
+# Define directionless/invalid relationships (y ~ x)
+invalid_pairs <- list(
+  c("Hatched_eggs", "Hatched_eggs"),
+  c("Hatched_eggs", "Hatch_spread"),
+  c("Hatched_eggs", "Survived_1"),
+  c("Hatch_spread", "Hatch_spread"),
+  c("Hatch_spread", "Survived_1"),
+  c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))
+}
+
+# Plotting function
+plot_cell <- function(masterlist_data, xvar, yvar) {
+  if (is_invalid(yvar, xvar)) {
+    ggplot() +
+      theme_void() +
+      theme(panel.border = element_rect(color = "black", fill = NA))
+  } else {
+    p <- ggplot(masterlist_data, aes_string(x = xvar, y = yvar)) +
+      geom_point(alpha = 0.6) +
+      theme_bw() +
+      theme(
+        panel.grid = element_blank(),
+        panel.border = element_rect(color = "black"),
+        axis.title = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank())
+    
+# Show x-axis title and ticks only on bottom row
+if (yvar == y_vars[1]) {
+    p <- p + xlab(var_labels[xvar]) +
+    theme(axis.text.x = element_text(), axis.ticks.x = element_line())}
+    
+# Show y-axis title and ticks only on left column
+if (xvar == x_vars[1]) {
+p <- p + ylab(var_labels[yvar]) +
+theme(axis.text.y = element_text(), axis.ticks.y = element_line())}
+return(p)}}
+
+plot_rows <- lapply(rev(y_vars), function(y) {
+  row <- lapply(x_vars, function(x) plot_cell(masterlist_data, x, y))
+  wrap_plots(row, nrow = 1)})
+
+final_plot <- wrap_plots(plot_rows, ncol = 1)
+
+final_plot 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(ggplot2)
+library(GGally)
+
+library(ggplot2)
+library(patchwork)
+
+# Your variables
+x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
+y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
+
+# Define invalid or directionless relationships (y ~ x)
+invalid_pairs <- list(
+  c("Hatched_eggs", "Hatched_eggs"),
+  c("Hatched_eggs", "Hatch_spread"),
+  c("Hatched_eggs", "Survived_1"),
+  c("Hatch_spread", "Hatch_spread"),
+  c("Hatch_spread", "Survived_1"),
+  c("Survived_1", "Survived_1"))
+
+is_invalid <- function(y, x) {
+  any(sapply(invalid_pairs, function(p) all(p == c(y, x))))
+}
+
+# Custom plot function
+plot_cell <- function(masterlist_data, xvar, yvar) {
+  if (is_invalid(yvar, xvar)) {
+    ggplot() + 
+      theme_void() +
+      annotate("text", x = 0.5, y = 0.5, label = "✖", size = 6, color = "red")
+  } else {
+    ggplot(masterlist_data, aes_string(x = xvar, y = yvar)) +
+      geom_point(alpha = 0.6) +
+      theme_classic() +
+      theme(axis.title = element_blank())}}
+
+# Create the panel grid
+plots <- lapply(rev(y_vars), function(y) {
+  lapply(x_vars, function(x) plot_cell(masterlist_data, x, y)) |> patchwork::wrap_plots(nrow = 1)})
+
+# Combine all rows into one final plot
+final_plot <- wrap_plots(plots, ncol = 1)
+
+# Display
+final_plot 
+
+
+
+
+
+
+
+# Custom plot function to blank/annotate irrelevant relationships
+custom_plot <- function(data, mapping, ...) {
+  x_var <- as_label(mapping$x)
+  y_var <- as_label(mapping$y)
+  
+  # Define invalid relationships
+  invalid_pairs <- list(
+    c("Hatched_eggs", "Hatch_spread"),
+    c("Hatched_eggs", "Survived_1"),
+    c("Hatch_spread", "Survived_1"))
+  
+  if ((x_var == y_var) ||
+      any(sapply(invalid_pairs, function(pair) all(pair == c(y_var, x_var))))) {
+    ggplot(data, mapping) +
+      theme_void() +
+      annotate("text", x = 0.5, y = 0.5, label = "✖", size = 8, color = "red")
+  } else {
+    ggplot(data, mapping) +
+      geom_point(alpha = 0.6) +
+      geom_smooth(method = "lm", se = FALSE, color = "blue") +
+      theme_minimal()}}
+
+# Create ggpairs with selected variables
+ggpairs(masterlist_data,
+  columns = c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1"),
+  ylab = NULL, xlab = NULL,
+  upper = list(continuous = custom_plot),
+  lower = list(continuous = custom_plot),
+  diag = list(continuous = "blankDiag"))
+
+
+
+
+survival_dif <- masterlist_data %>%
+  mutate(Has_1 = !is.na(Survived_1),
+         Has_2 = !is.na(Survived_2)) %>%
+  summarize(only_1 = sum(Has_1 & !Has_2),
+            only_2 = sum(!Has_1 & Has_2),
+            both = sum(Has_1 & Has_2))
+
+survival_dif_results <- masterlist_data %>%
+  filter(!is.na(Survived_1), !is.na(Survived_2), Survived_1 > 0) %>%
+  mutate(diff = Survived_1 - Survived_2) %>%
+  count(diff) %>%
+  arrange(diff)
+survival_dif_results
+
+
+
+
 # Pivoting data longer with 
 longer_data1 <- masterlist_data %>%
   pivot_longer(cols = c('Hatched_eggs','Hatch_success'), names_to = 'Data', 
@@ -85,7 +642,7 @@ figure_1 <- ggplot(longer_data1, aes(x = Predictor_value, y = Value)) +
 print(figure_1)
 
 # Pivoting data longer with two survival estimates. 1) Conservative estimate: 
-# When survival unknown, NAs converted to 0s. 2) Liberal estimate: NAs were removed.
+# When survival unknown, NAs converted to 0s. 2) Liberal estimate: NAs removed.
 longer_data2 <- masterlist_data %>%
   pivot_longer(cols = c(Survived_1_cons, Survived_2_cons,
                Relative_survive_success_1, Relative_survive_success_2),
@@ -120,13 +677,22 @@ figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value, color = con
         strip.text = element_text(size = 8))
 print(figure_2) 
 
+longer_data2 <- masterlist_data %>%
+  pivot_longer(cols = c(Survived_1, Survived_2,
+                        Relative_survive_success_1, Relative_survive_success_2),
+               names_to = "Data", values_to = "Value") %>%
+  mutate(Data = factor(Data, levels = c("Survived_1", "Survived_2",
+                                 "Relative_survive_success_1", "Relative_survive_success_2"))) %>%
+  pivot_longer(cols = c(Hatch_spread, Clutch_size, Hatched_eggs),
+               names_to = "Predictor", values_to = "Predictor_value")
+
 # Plot of number and proportion of clutch surviving to 30 and 60 days. 
 figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value)) +
   geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
   facet_grid(Data ~ Predictor, scales = "free", labeller = labeller(
-    Data = c(Survived_2_cons = "Number of survivors\nto 60 days", 
+    Data = c(Survived_2 = "Number of survivors\nto 60 days", 
              Relative_survive_success_2 = "Proportion of brood\nsurvived to 60 days", 
-             Survived_1_cons = "Number of survivors\nto 30 days", 
+             Survived_1 = "Number of survivors\nto 30 days", 
              Relative_survive_success_1 = "Proportion of brood\nsurvived to 30 days"), 
     Predictor = c(Clutch_size = "Clutch size", Hatch_spread = "Hatch spread (days)", 
                   Hatched_eggs = "Hatched eggs")), switch = "both") +
@@ -137,8 +703,6 @@ figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 8))
 print(figure_2) 
-
-
 
 # PREDICTION 1A: Shorter HS have better hatching success
 # PREDICTION 2A: Number of hatched eggs increase with clutch size 
@@ -151,111 +715,122 @@ diagnostics <- function(model) {
   testDispersion(res)
   testZeroInflation(res)}
   
-# Model analyzing relative proportion of hatched eggs by clutch size, HS, and single/joint
-model_1 <- glmmTMB(cbind(Hatched_eggs, Clutch_size - Hatched_eggs) ~ 
+# Model analyzing relative proportion hatched eggs by clutch size, HS, single/joint.
+Hatch_model <- glmmTMB(cbind(Hatched_eggs, Clutch_size - Hatched_eggs) ~ 
                   Hatch_spread + Clutch_size + Females +
                   (1|Year), family = betabinomial,
                   data = masterlist_data)
-diagnostics(model_1)
-summary(model_1)
+diagnostics(Hatch_model)
+summary(Hatch_model)
 
 # PREDICTION 1B: Shorter HS have better survival
 # PREDICTION 2B: Larger broods have more survivors. 
 
-# Model analyzing conservative estimate of survivors to 30 days by clutch size, females
-# and an interaction between hatch spread and number of hatched eggs
-model_2 <- glmmTMB(cbind(Survived_1_cons, Hatched_eggs - Survived_1_cons) ~ 
+# Model analyzing conservative estimate of survivors to 30 days by clutch size, 
+# females and an interaction between hatch spread and number of hatched eggs.
+Cons_30_model <- glmmTMB(cbind(Survived_1_cons, Hatched_eggs - Survived_1_cons) ~ 
                      Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
                    family = betabinomial, data = masterlist_data)
-diagnostics(model_2)
-summary(model_2)
+diagnostics(Cons_30_model)
+summary(Cons_30_model)
 
-# Model analyzing conservative estimate of survivors to 60 days by clutch size, females
-# and an interaction between hatch spread and number of hatched eggs
-model_2 <- glmmTMB(cbind(Survived_2_cons, Hatched_eggs - Survived_2_cons) ~ 
+# Model analyzing conservative estimate of survivors to 60 days by clutch size, 
+# females and an interaction between hatch spread and number of hatched eggs.
+Cons_60_model <- glmmTMB(cbind(Survived_2_cons, Hatched_eggs - Survived_2_cons) ~ 
                    Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
                    family = betabinomial, data = masterlist_data)
-diagnostics(model_2)
-summary(model_2)
+diagnostics(Cons_60_model)
+summary(Cons_60_model)
 
-model_3 <- glmmTMB(cbind(Survived_1_cons, Hatched_eggs - Survived_1_cons) ~ 
-                   Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
-                   family = betabinomial, data = masterlist_data)
-diagnostics(model_3)
-summary(model_3)
-
-# Model analyzing liberal survivors (liberal estimate) by clutch size and HS
+# Model analyzing liberal survivors (liberal estimate) to 30 days by clutch size, 
+# females and an interaction between hatch spread and number of hatched eggs.
 lib_data_1 <- masterlist_data %>% filter(!is.na(Survived_1))
-
-model_4 <- glmmTMB(cbind(Survived_1, Hatched_eggs - Survived_1) ~ 
+Lib_30_model <- glmmTMB(cbind(Survived_1, Hatched_eggs - Survived_1) ~ 
                    Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
                    family = betabinomial,
                    data = lib_data_1)
-diagnostics(model_4)
-summary(model_4)
+diagnostics(Lib_3_model)
+summary(Lib_30_model)
 
 lib_data_2 <- masterlist_data %>% filter(!is.na(Survived_2))
-model_5 <- glmmTMB(cbind(Survived_2, Hatched_eggs - Survived_2) ~ 
+Lib_60_model <- glmmTMB(cbind(Survived_2, Hatched_eggs - Survived_2) ~ 
                    Hatch_spread*Hatched_eggs + Clutch_size + Females + (1|Year), 
                    family = betabinomial,
                    data = lib_data_2)
-diagnostics(model_5)
-summary(model_5)
+diagnostics(Lib_60_model)
+summary(Lib_60_model)
 
 # PREDICTION 2C: Larger clutches have larger hatch spreads
-correlation_a <- cor(as.numeric(masterlist_data$Hatch_spread), 
-                   as.numeric(masterlist_data$Clutch_size), method = 'pearson')
-correlation_b <- cor(as.numeric(masterlist_data$Hatch_spread), 
-                   as.numeric(masterlist_data$Hatched_eggs), method = 'pearson')
+longer_data3 <- masterlist_data %>%
+  pivot_longer(cols = c(Clutch_size, Hatched_eggs),
+               names_to = "Predictor", values_to = "Predictor_value")
+
+ggplot(longer_data3, aes(x = Predictor_value, y = Hatch_spread)) +
+  geom_jitter(width = 0.2, height = 0.1, alpha = 0.8) +
+  facet_wrap(~ Predictor, scales = "free_x", strip.position = "bottom", 
+             labeller = labeller(Predictor = c(Clutch_size = "Clutch size", 
+             Hatched_eggs = "Hatched eggs"))) +
+  theme_classic() +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5)) +  # tries to get ~5 ticks
+  scale_y_continuous(breaks = seq(1, 12, 1)) +
+  labs(x = NULL, y = "Hatch spread (days)")+
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
+  theme(strip.background = element_blank(), strip.placement = "outside", 
+        strip.text = element_text(size = 11))
+
+correlation_a <- cor.test(as.numeric(masterlist_data$Hatch_spread), 
+                          as.numeric(masterlist_data$Clutch_size), method = "spearman")
+correlation_b <- cor.test(as.numeric(masterlist_data$Hatch_spread), 
+                          as.numeric(masterlist_data$Hatched_eggs), method = "spearman")
 correlation_a
 correlation_b
 
-ggplot(masterlist_data, aes(x = Clutch_size, y = Hatch_spread)) +
-  geom_jitter(width = 0.2, height = 0.2, alpha = 0.8) +
-  theme_classic()
-
-ggplot(masterlist_data, aes(x = Hatched_eggs, y = Hatch_spread)) +
-  geom_jitter(width = 0.2, height = 0.2, alpha = 0.8) +
-  theme_classic()
 
 # HYPOTHESIS 3: Subordinate females benefit more from synchronous nests
-
 # Prediction 3a: Positive correlation between lay order and hatch order
+
 laying_data <- read_excel("Lay_hatch_data.xlsx") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) 
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
+  filter(Known_lay_order < 10)
 
-laying_data <- laying_data %>%
-  filter(Known_lay_order < 10).   #### Justify this part!!!
-
-ggplot(laying_data, aes(x = Known_lay_order, y = Hatch_order)) +
-  geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 0.7) +
-  labs(y = "Hatch order", x = "Lay order") +
-  theme_classic()  + 
-  scale_x_continuous(breaks = 0:10) + 
-  scale_y_continuous(breaks = 0:10) +
-  geom_smooth(method = "lm", se = TRUE)
+laying_data_longer <- laying_data
+  pivot_longer(cols = c(Hatch_order, Incubation_period),
+             names_to = "Data", values_to = "Value")
   
+ggplot(laying_data_longer, aes(x = Known_lay_order, y = Value)) +
+  geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 0.7) +
+  labs(y = NULL, x = "Lay order") +
+  theme_classic() +
+  facet_wrap(~ Data, scales = "free_y", ncol = 1, strip.position = "left", 
+            labeller = labeller(Data = c(Hatch_order = "Hatch order", 
+            Incubation_period = "Time in nest (days)"))) +  
+  scale_x_continuous(breaks = seq(0, 10, by = 0.5),
+  labels = ifelse(seq(0, 10, by = 0.5) %% 1 == 0, seq(0, 10, by = 0.5), "")) +
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
+  theme(strip.background = element_blank(), strip.placement = "outside", 
+        strip.text = element_text(size = 11))
+
+lay_order_model <- glmmTMB(Hatch_order ~ Known_lay_order + (1|Nest_ID), 
+                           family = gaussian, data = laying_data)
+diagnostics(lay_order_model)  
+
+
+egg_size_model <- glmmTMB()
+
+
+
 correlation <- cor.test(as.numeric(laying_data$Known_lay_order), 
                as.numeric(laying_data$Hatch_order), method = 'pearson')
 print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
-
-ggplot(laying_data, aes(x = Known_lay_order, y = Incubation_period)) +
-  geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 1) +
-  labs(y = "Observed nesting period (days)", x = "Laying order") +
-  theme_classic() 
 
 nlme_model <- nlme(Incubation_period ~ a * exp(-b * Known_lay_order),
                    data = laying_data,
                    fixed = a + b ~ 1,
                    random = a ~ 1 | Nest_ID,
-                   start = c(a = 1, b = 0.03))
+                   start = c(a = 1, b = 0.5))
 diagnostics(nlme_model)
 summary(nlme_model)
 
-plot(nlme_model, resid(., type = "pearson") ~ fitted(.), abline = 0)
-hist(residuals(nlme_model), breaks = 30, main = "Residuals", xlab = "Residuals")
-qqnorm(resid(nlme_model))
-qqline(resid(nlme_model))
 
 #### PREDICTION 3b: Earlier hatched eggs have greater survival
 
@@ -271,19 +846,13 @@ chick_data[cols] <- masterlist_data[idx, cols]
 chick_data <- chick_data %>%
   filter(!(Mass > 35 | Tarsus > 40 | Shield_to_tip > 24))
 
-# Pivoting data longer then filtering out data that has unusually large birds
-# (likely typos or issues with the measurements and potential recaptures). 
+# Pivoting data longer then filtering out Tarsus mreasurements before 2019
 chick_data_longer <- chick_data %>%
   pivot_longer(cols = c('Mass', 'Tarsus', 'Shield_to_tip'), 
                names_to = 'Morphometrics', 
                values_to = 'Value') %>%
   filter(!is.na(Value)) %>%
   filter(!(Morphometrics == "Tarsus" & Year < 2019))
-
-int_breaks_5 <- function(x) {
-  rng <- range(x, na.rm = TRUE)
-  seq(from = floor(rng[1]), to = ceiling(rng[2]), length.out = 5) |> unique()
-}
 
 # Figure of chick size by hatch order
 ggplot(chick_data_longer, aes(x = Hatch_Day, y = Value)) +
@@ -299,6 +868,7 @@ ggplot(chick_data_longer, aes(x = Hatch_Day, y = Value)) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 11))
+
 
 chick_data_survival <- chick_data %>%
   filter(!is.na(Survived) & Survived %in% c(0, 1)) %>%
@@ -359,35 +929,20 @@ model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Mass +
 diagnostics(model_2_3d)
 summary(model_2_3d)
 
-# Pivoting data longer then filtering out data that has unusually large birds
-# (likely typos or issues with the measurements and potential recaptures). 
-chick_data_longer <- chick_data %>%
-  pivot_longer(cols = c('Mass', 'Tarsus',
-                        'Shield_to_tip'), 
-               names_to = 'Morphometrics', 
-               values_to = 'Value') %>%
-  filter(!is.na(Value)) %>%
-  filter(!(Morphometrics == "Tarsus" & Year < 2019))
-  
-# Figure of chick size by hatch order
-ggplot(chick_data_longer, aes(x = Hatch_order, y = Value)) +
-  geom_jitter(width = 0.04, height = 0.1, size = 1, alpha = 0.7) +
-  facet_wrap(~Morphometrics, scales="free_y", ncol = 1, strip.position = "left",
-             labeller = labeller(
-    Morphometrics = c(Mass = "Mass (g)",
-                      Tarsus = "Left outer tarsus (mm)", 
-                      Shield_to_tip = "Shield to tip (mm)"))) +
-  labs(x = "Hatch order", y = NULL) +
-  scale_x_continuous(breaks = seq(1, 10, 1)) +
-  theme_classic() +
-  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
-  theme(strip.background = element_blank(), strip.placement = "outside", 
-        strip.text = element_text(size = 11))
-
 # Figure of survival by size at hatching 
 chick_data_longer <- chick_data_longer %>%
   filter(!is.na(Survived)) %>%
-  filter(! Survived == "NA")
+  filter(! Survived == "NA") %>%
+  group_by(Morphometrics, Survived) %>%
+  summarise(mean_value = mean(Value, na.rm = TRUE), .groups = "drop")
+
+chick_data_means <- chick_data_longer %>%
+  group_by(Morphometrics, Survived) %>%
+  summarise(mean_value = mean(Value, na.rm = TRUE),
+            sd = sd(Value, na.rm = TRUE),
+            min = min(Value, na.rm = TRUE),
+            max = max(Value, na.rm = TRUE),
+            n = sum(!is.na(Value)), .groups = "drop")
   
 ggplot(chick_data_longer, aes(x = Survived, y = Value)) +
   geom_point(size = 2, alpha = 0.7) +
@@ -395,6 +950,8 @@ ggplot(chick_data_longer, aes(x = Survived, y = Value)) +
              labeller = labeller(
   Morphometrics = c(Mass = "Mass (g)", Tarsus = "Left outer tarsus (mm)", 
                     Shield_to_tip = "Shield to tip (mm)"))) +
+  geom_line(data = chick_data_means, aes(x = Survived, y = mean_value, group = Morphometrics),
+            color = "red", linewidth = 0.6) +
   labs(x = NULL, y = NULL) +
   scale_y_continuous() +
   scale_x_discrete(labels = c("0" = "Died", "1" = "Survived")) +
@@ -512,12 +1069,12 @@ summary_successful_MT <- summarize_data(successful_nests_long_MT)
 lapply(list(summary_experiment_data, summary_successful, 
             summary_successful_HS, summary_successful_MT), print, n = 30)
 
-#### T-TESTS analyzing the effectiveness of the experimental design ####
-t.test(Foreign_percentage ~ Treatment, data = experiment_data) # proportion swapped eggs
-t.test(Manipulated_clutch_size ~ Treatment, data = experiment_data) # manipulated clutch size
-t.test(Observed_nesting_period ~ Treatment, data = successful_nests) # observed nesting period
-t.test(True_hatch_spread ~ Treatment, data = successful_nests_HS) # Hatch spread
-t.test(Transfered_time ~ Treatment, data = successful_nests_MT) # Transferred time
+# T-TESTS analyzing the effectiveness of the experimental design
+t.test(Foreign_percentage~Treatment, data = experiment_data) # proportion swapped
+t.test(Manipulated_clutch_size~Treatment, data = experiment_data) # Clutch size
+t.test(Observed_nesting_period~Treatment, data = successful_nests) # Nesting period
+t.test(True_hatch_spread~Treatment, data = successful_nests_HS) # HS
+t.test(Transfered_time~Treatment, data = successful_nests_MT) # Transferred time
 
 # Model analyzing number of hatched eggs by clutch size
 model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
