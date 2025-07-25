@@ -61,6 +61,14 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
   mutate(Converted_na_1_prop = is.na(Relative_survive_success_1), 
          Converted_na_2_prop = is.na(Relative_survive_success_2))
 
+only_big_nests <- masterlist_data %>%
+  filter(Clutch_size >5)
+
+ggplot(only_big_nests, aes(x = Observed_nesting_period, y = Hatch_success)) +
+  geom_point() +
+  theme_classic()
+
+
 
 x_vars <- c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1")
 y_vars <- c("Hatched_eggs", "Hatch_spread", "Survived_1", "Survived_2")
@@ -565,41 +573,6 @@ final_plot
 
 
 
-
-
-# Custom plot function to blank/annotate irrelevant relationships
-custom_plot <- function(data, mapping, ...) {
-  x_var <- as_label(mapping$x)
-  y_var <- as_label(mapping$y)
-  
-  # Define invalid relationships
-  invalid_pairs <- list(
-    c("Hatched_eggs", "Hatch_spread"),
-    c("Hatched_eggs", "Survived_1"),
-    c("Hatch_spread", "Survived_1"))
-  
-  if ((x_var == y_var) ||
-      any(sapply(invalid_pairs, function(pair) all(pair == c(y_var, x_var))))) {
-    ggplot(data, mapping) +
-      theme_void() +
-      annotate("text", x = 0.5, y = 0.5, label = "✖", size = 8, color = "red")
-  } else {
-    ggplot(data, mapping) +
-      geom_point(alpha = 0.6) +
-      geom_smooth(method = "lm", se = FALSE, color = "blue") +
-      theme_minimal()}}
-
-# Create ggpairs with selected variables
-ggpairs(masterlist_data,
-  columns = c("Clutch_size", "Hatched_eggs", "Hatch_spread", "Survived_1"),
-  ylab = NULL, xlab = NULL,
-  upper = list(continuous = custom_plot),
-  lower = list(continuous = custom_plot),
-  diag = list(continuous = "blankDiag"))
-
-
-
-
 survival_dif <- masterlist_data %>%
   mutate(Has_1 = !is.na(Survived_1),
          Has_2 = !is.na(Survived_2)) %>%
@@ -651,7 +624,7 @@ longer_data2 <- masterlist_data %>%
       Data == "Survived_1_cons" ~ converted_na_1,
       Data == "Survived_2_cons" ~ converted_na_2,
       Data == "Relative_survive_success_1" ~ Converted_na_1_prop,
-      Data == "Relative_survive_success_2" ~ Converted_na_2_prop),
+      Data == "Relative_survive_success_2" ~ Converted_na_2_prop)
       Value = ifelse(converted_na & is.na(Value), 0, Value),
       Data = factor(Data, levels = c("Survived_1_cons", "Survived_2_cons",
       "Relative_survive_success_1", "Relative_survive_success_2"))) %>%
@@ -678,21 +651,31 @@ figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value, color = con
 print(figure_2) 
 
 longer_data2 <- masterlist_data %>%
-  pivot_longer(cols = c(Survived_1, Survived_2,
+  pivot_longer(cols = c(Hatch_success,
                         Relative_survive_success_1, Relative_survive_success_2),
                names_to = "Data", values_to = "Value") %>%
-  mutate(Data = factor(Data, levels = c("Survived_1", "Survived_2",
+  mutate(Data = factor(Data, levels = c("Hatch_success",
                                  "Relative_survive_success_1", "Relative_survive_success_2"))) %>%
   pivot_longer(cols = c(Hatch_spread, Clutch_size, Hatched_eggs),
                names_to = "Predictor", values_to = "Predictor_value")
+
+
+longer_data2 <- masterlist_data %>%
+  pivot_longer(cols = c(Hatch_success,
+                        Relative_survive_success_1, Relative_survive_success_2),
+               names_to = "Data", values_to = "Value") %>%
+  mutate(Data = factor(Data, levels = c("Relative_survive_success_2",
+                                        "Relative_survive_success_1", "Hatch_success"))) %>%
+  pivot_longer(cols = c(Hatch_spread, Clutch_size, Hatched_eggs),
+               names_to = "Predictor", values_to = "Predictor_value")
+
 
 # Plot of number and proportion of clutch surviving to 30 and 60 days. 
 figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value)) +
   geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
   facet_grid(Data ~ Predictor, scales = "free", labeller = labeller(
-    Data = c(Survived_2 = "Number of survivors\nto 60 days", 
-             Relative_survive_success_2 = "Proportion of brood\nsurvived to 60 days", 
-             Survived_1 = "Number of survivors\nto 30 days", 
+    Data = c(Relative_survive_success_2 = "Proportion of brood\nsurvived to 60 days", 
+             Hatch_success = "Proportion of clutch\n hatched (%) ", 
              Relative_survive_success_1 = "Proportion of brood\nsurvived to 30 days"), 
     Predictor = c(Clutch_size = "Clutch size", Hatch_spread = "Hatch spread (days)", 
                   Hatched_eggs = "Hatched eggs")), switch = "both") +
@@ -815,8 +798,10 @@ lay_order_model <- glmmTMB(Hatch_order ~ Known_lay_order + (1|Nest_ID),
 diagnostics(lay_order_model)  
 
 
-egg_size_model <- glmmTMB()
-
+egg_size_model <- glmmTMB(Volume_cm_cubed ~ Known_lay_order + (1|Nest_ID), 
+                          family = gaussian, data = laying_data)
+diagnostics(egg_size_model)
+summary(egg_size_model)
 
 
 correlation <- cor.test(as.numeric(laying_data$Known_lay_order), 
@@ -923,8 +908,21 @@ model_Tars <- glmmTMB(Tarsus ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year),
 diagnostics(model_Tars)
 summary(model_Tars)
 
-model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Mass + 
+
+model_2_3d <- glmmTMB(as.numeric(Survived) ~ Mass +
                      (1|Nest_ID) + (1|Year), family = binomial, 
+                      data = chick_data_survival)
+diagnostics(model_2_3d)
+summary(model_2_3d)
+
+model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Tarsus + 
+                        (1|Nest_ID) + (1|Year), family = binomial, 
+                      data = chick_data_survival)
+diagnostics(model_2_3d)
+summary(model_2_3d)
+
+model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Shield_to_tip + 
+                        (1|Nest_ID) + (1|Year), family = binomial, 
                       data = chick_data_survival)
 diagnostics(model_2_3d)
 summary(model_2_3d)
@@ -1076,6 +1074,12 @@ t.test(Observed_nesting_period~Treatment, data = successful_nests) # Nesting per
 t.test(True_hatch_spread~Treatment, data = successful_nests_HS) # HS
 t.test(Transfered_time~Treatment, data = successful_nests_MT) # Transferred time
 
+
+ggplot(successful_nests, aes(x = Observed_nesting_period, y = Hatch_success)) +
+  geom_point() 
+
+
+
 # Model analyzing number of hatched eggs by clutch size
 model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
                      Treatment + Manipulated_clutch_size,
@@ -1083,9 +1087,22 @@ model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~
 diagnostics(model_1)
 summary(model_1)
 
+model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
+                     Treatment + Observed_nesting_period,
+                   family = betabinomial, data = successful_nests)
+diagnostics(model_1)
+summary(model_1)
+
 # Model analyzing number of survivors by treatment.
 model_2 <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
                    Treatment + Hatched + (1|Year), 
+                   family = betabinomial, data = successful_nests)
+diagnostics(model_2)
+summary(model_2)
+
+# Model analyzing number of survivors by treatment.
+model_2 <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
+                     Treatment + Observed_nesting_period + (1|Year), 
                    family = betabinomial, data = successful_nests)
 diagnostics(model_2)
 summary(model_2)
@@ -1110,3 +1127,52 @@ ggplot(survival_data_long, aes(x = Treatment, fill=factor(Treatment_survival))) 
                                "Asynchronous_0" = "blue", 
                                "Synchronous_1" = "firebrick4", 
                                "Synchronous_0" = "firebrick1"), guide = "none")
+
+
+# A post-hoc power analysis using the pwr package (Champely 2020) with the 
+# Hedge’s g effect size of 0.34 (95% CI: -0.439, 1.116) revealed we would 
+# have needed a sample size of 69 nests required to obtain statistical 
+# significance (alpha = 0.05) in hatching rate while maintaining 
+# sufficient power (1- β = 0.8).
+
+# 1. Fit your real model on real data (this must be the model you used in your study)
+model <- glmer(Survival_60 ~ Treatment + Manipulated_clutch_size + (1|Nest_ID),
+                      data = survival_data_long,
+                      family = binomial)
+diagnostics(model)
+
+# 2. Set up effect sizes and sample sizes
+effect_sizes <- c(-0.4, -0.25, -0.15, -0.05)
+sample_sizes <- seq(30, 200, by = 30)
+power_results <- data.frame()
+
+# 3. Loop over effect sizes and sample sizes
+  for (es in effect_sizes) {
+    sim_model <- model
+    fixef(sim_model)["TreatmentSynchronous"] <- es  
+  
+  for (n in sample_sizes) {
+    
+    # Extend the model to simulate new data with larger sample size
+    sim_model_extended <- extend(sim_model, along = "Nest_ID", n = n)
+    
+    # Simulate power for detecting the treatment effect
+    psim <- powerSim(sim_model_extended, fixed("TreatmentSynchronous", "z"), nsim = 50, progress = FALSE)
+    
+    psim <- try(powerSim(model_extended, fixed("TreatmentSynchronous", "z"),
+                         nsim = 50, progress = FALSE), silent = TRUE)
+    
+    power_val <- if (inherits(psim, "try-error")) NA else psim$power
+    
+    power_results <- rbind(power_results,
+                           data.frame(EffectSize = abs(es), SampleSize = n, Power = power_val))}}
+
+# 4. Plotting the results
+ggplot(power_results, aes(x = SampleSize, y = Power, color = factor(EffectSize))) +
+  geom_line(size = 1.2) +
+  geom_hline(yintercept = 0.8, linetype = "dashed", color = "black") +
+  scale_color_manual(values = c("blue", "red", "green", "purple")) +
+  labs(x = "Sample Size (Number of Nests)",
+       y = "Statistical Power",
+       colour = "Effect Size (Abs)") +
+  theme_classic()
