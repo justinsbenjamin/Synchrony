@@ -21,6 +21,7 @@ library(broom.mixed)
 library(simr)
 library(nlme)
 library(patchwork)  
+library(ggbeeswarm)
 
 ############################
 ####      CHAPTER 2     ####
@@ -743,18 +744,21 @@ diagnostics(model_2)
 summary(model_2)
 
 
+model_2 <- glmmTMB(Inclusive_Fitness_Survive_Brood_adj ~ 
+                     Treatment + Hatched + Manipulated_clutch_size + (1|Year), 
+                   family = beta_family(), data = successful_nests)
+diagnostics(model_2)
+summary(model_2)
 
 
 
 
 n <- nrow(successful_nests)
-successful_nests$Inclusive_Fitness_adj <- (successful_nests$Inclusive_Fitness * (n - 1) + 0.5) / n
+successful_nests$Inclusive_Fitness_Hatch_adj <- pmin(pmax(successful_nests$Survive_success_brood, 0.001), 0.999)
 
-
-model_hatch_fitness <- glmmTMB(Inclusive_Fitness_adj ~ Treatment + Manipulated_clutch_size +
-                           Observed_nesting_period + 
-                           (1|Year), family = beta_family(), 
-                         data = successful_nests)
+model_hatch_fitness <- glmmTMB(Inclusive_Fitness_Hatch_adj ~ Treatment + 
+                               Manipulated_clutch_size + Observed_nesting_period + 
+                               (1|Year), family = beta_family(), data = successful_nests)
 diagnostics(model_hatch_fitness)
 summary(model_hatch_fitness)
 
@@ -767,21 +771,6 @@ summary(model_survive_fitness)
 
 
 
-
-
-
-ggplot(successful_nests, aes(x = Treatment, y = Hatch_success)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(method = "loess") +
-  theme_minimal()
-
-ggplot(successful_nests, aes(x = Treatment, y = Inclusive_Fitness)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(method = "loess") +
-  theme_minimal()
-
-plot(fitted(model_fitness), residuals(model_fitness))
-abline(h = 0, col = "red")
 
 
 
@@ -799,51 +788,78 @@ survival_data_long <- successful_nests %>%
 ggplot(survival_data_long, aes(x = Treatment, fill=factor(Treatment_survival))) +
   geom_bar(position = position_dodge(width = 0.9)) +
   theme_classic() +
+  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
+  theme(axis.text.x = element_text(size = 11, colour = "black")) +
   geom_text(stat = "count", aes(label = ..count..), 
             position = position_dodge(width = 0.9), vjust = -0.3, size = 4) +
-  labs(x = "Treatment", y = "Count", fill = "Survived") +
+  labs(x = "", y = "Count", fill = "Survived") +
   scale_fill_manual(values = c("Asynchronous_1" = "darkblue", 
                                "Asynchronous_0" = "blue", 
                                "Synchronous_1" = "firebrick4", 
-                               "Synchronous_0" = "firebrick1"), guide = "none")
+                               "Synchronous_0" = "firebrick1")) +
+  theme(legend.position = "right", legend.box = "vertical") 
+
+
+survival_data_long$fill_color <- ifelse(grepl("Asynchronous", survival_data_long$Treatment_survival), "blue", "firebrick1")
+survival_data_long$pattern <- ifelse(grepl("_1", survival_data_long$Treatment_survival), "none", "stripe")
+
+ggplot(survival_data_long, aes(x = Treatment, pattern = pattern, 
+                               pattern_fill = fill_color, fill = fill_color)) +
+  geom_bar_pattern(position = position_dodge(width = 0.9),
+                   stat = "count",
+                   pattern_density = 0.4,
+                   pattern_spacing = 0.03,
+                   pattern_angle = 45,
+                   color = "black") +
+  theme_classic() +
+  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
+  theme(axis.text.x = element_text(size = 11, colour = "black")) +
+  geom_text(stat = "count", aes(label = ..count..), 
+            position = position_dodge(width = 0.9), vjust = -0.3, size = 4) +
+  labs(x = "", y = "Count", fill = "Treatment", pattern = "Survived") +
+  scale_fill_identity(guide = "legend", labels = c("Asynchronous", "Synchronous")) +
+  scale_pattern_manual(values = c("none" = "Smooth", "stripe" = "Not Survived")) +
+  theme(legend.position = "right", legend.box = "vertical")
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 swapping_data <- read_excel("Egg_swapping.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
   filter(Number_nest_transfers == 1) %>%
 
-ggplot(synch_swaps, aes(x = Status, y = Hatch_order)) +
-  geom_jitter(width = 0.05, height = 0, alpha = 0.8) +
-  theme_classic()
+ggplot(swapping_data, aes(x = Status, y = Hatch_order, colour = Treatment)) +
+  geom_beeswarm(cex = 4.5) +
+  theme_classic() +
+  labs(y = "Hatch Order", x = "") +
+  theme(axis.text.x = element_text(size = 11, colour = "black")) +
+  scale_y_continuous(breaks = seq(0, 8, by = 0.5),
+                     labels = ifelse(seq(0, 8, by = 0.5) %% 
+                                       1 == 0, seq(0, 8, by = 0.5), "")) +
+  scale_x_discrete(expand = expansion(mult = c(1, 1)), labels = c("Original" = "Non-swapped", "Swapped" = "Swapped")) +
+  guides(color = guide_legend(title.position = "top", direction = "vertical")) +
+  theme(legend.position = "right", legend.box = "vertical") +
+  scale_color_manual(values=c("blue", "red"))
 
-ggplot(asynch_swaps, aes(x = Status, y = Hatch_order)) +
-  geom_jitter(width = 0.05, height = 0, alpha = 0.8) +
-  theme_classic()
-  
-  
-synch_swaps <- subset(swapping_data, Treatment == "Synchronous")
-
-model_1 <- glmmTMB(Hatched ~ Status + (1|Nest_ID) +
-                   + (1|Year), family = binomial, data = synch_swaps)
-diagnostics(model_1)
-summary(model_1)
-
-asynch_swaps <- subset(swapping_data, Treatment == "Asynchronous")
-model_2 <- glmmTMB(Hatched ~ Status + (1|Nest_ID) +
-                     + (1|Year), family = binomial, data = asynch_swaps)
-diagnostics(model_2)
-summary(model_2)
-
-
-model_3 <- glmmTMB(Survived ~ Status + (1|Nest_ID) +
-                     + (1|Year), family = binomial, data = synch_swaps)
+### Add clutch size to swapping data
+Swap_hatch_model <- glmmTMB(Hatched ~ Status*Treatment + Clutch_size + (1|Nest_ID) +
+                     + (1|Year), family = binomial, data = swapping_data)
 diagnostics(model_3)
 summary(model_3)
 
-model_4 <- glmmTMB(Survived ~ Status + (1|Nest_ID) +
-                     + (1|Year), family = binomial, data = asynch_swaps)
+Swap_survive_model <- glmmTMB(Survived ~ Status*Treatment + (1|Nest_ID) +
+                     + (1|Year), family = binomial, data = swapping_data)
 diagnostics(model_4)
-summary(model_4)
-
 
 
