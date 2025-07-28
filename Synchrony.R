@@ -785,55 +785,30 @@ survival_data_long <- successful_nests %>%
   mutate(Treatment_survival = paste(Treatment, Survival_60, sep = "_")) 
 
 # Bar plot of survival data.
-ggplot(survival_data_long, aes(x = Treatment, fill=factor(Treatment_survival))) +
-  geom_bar(position = position_dodge(width = 0.9)) +
-  theme_classic() +
-  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
-  theme(axis.text.x = element_text(size = 11, colour = "black")) +
-  geom_text(stat = "count", aes(label = ..count..), 
-            position = position_dodge(width = 0.9), vjust = -0.3, size = 4) +
-  labs(x = "", y = "Count", fill = "Survived") +
-  scale_fill_manual(values = c("Asynchronous_1" = "darkblue", 
-                               "Asynchronous_0" = "blue", 
-                               "Synchronous_1" = "firebrick4", 
-                               "Synchronous_0" = "firebrick1")) +
-  theme(legend.position = "right", legend.box = "vertical") 
-
-
-survival_data_long$fill_color <- ifelse(grepl("Asynchronous", survival_data_long$Treatment_survival), "blue", "firebrick1")
-survival_data_long$pattern <- ifelse(grepl("_1", survival_data_long$Treatment_survival), "none", "stripe")
-
-ggplot(survival_data_long, aes(x = Treatment, pattern = pattern, 
-                               pattern_fill = fill_color, fill = fill_color)) +
+survival_data_long$Survival_60 <- factor(survival_data_long$Survival_60, levels = c(0, 1), 
+                                      labels = c("Died", "Survived"))
+ggplot(survival_data_long, 
+       aes(x = Treatment, fill = Treatment, pattern = Survival_60)) +
   geom_bar_pattern(position = position_dodge(width = 0.9),
                    stat = "count",
+                   pattern_color = NA,
+                   pattern_fill = "grey",
                    pattern_density = 0.4,
-                   pattern_spacing = 0.03,
-                   pattern_angle = 45,
-                   color = "black") +
+                   pattern_spacing = 0.015,
+                   pattern_size = 1.0,
+                   pattern_angle = 45) +
   theme_classic() +
   scale_y_continuous(expand = expansion(mult = c(0, .05))) +
   theme(axis.text.x = element_text(size = 11, colour = "black")) +
   geom_text(stat = "count", aes(label = ..count..), 
             position = position_dodge(width = 0.9), vjust = -0.3, size = 4) +
-  labs(x = "", y = "Count", fill = "Treatment", pattern = "Survived") +
-  scale_fill_identity(guide = "legend", labels = c("Asynchronous", "Synchronous")) +
-  scale_pattern_manual(values = c("none" = "Smooth", "stripe" = "Not Survived")) +
+  scale_fill_manual(values = c("Asynchronous" = "blue", "Synchronous" = "firebrick1")) +
+  guides(fill = "none") + 
+  scale_pattern_manual(values = c("Survived" = "stripe", "Died" = "none", 
+                                  labels = c("Survived" = "Survived", "Died" = "Died"),
+                                  name = "Outcome")) +
+  labs(x = "", y = "Count", fill = "Treatment", pattern = "Fate") +
   theme(legend.position = "right", legend.box = "vertical")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 swapping_data <- read_excel("Egg_swapping.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
@@ -862,4 +837,7 @@ Swap_survive_model <- glmmTMB(Survived ~ Status*Treatment + (1|Nest_ID) +
                      + (1|Year), family = binomial, data = swapping_data)
 diagnostics(model_4)
 
-
+model <- glmmTMB(Hatch_order ~ Status*Treatment + (1|Nest_ID), 
+                 family = gaussian, data = swapping_data)
+diagnostics(model)
+summary(model)
