@@ -306,6 +306,25 @@ Hatch_model <- glmmTMB(cbind(Hatched_eggs, Clutch_size - Hatched_eggs) ~
 diagnostics(Hatch_model)
 summary(Hatch_model)
 
+CI_95 <- function(model, odds_ratio = FALSE) {
+  coefs <- summary(model)$coefficients$cond
+  z <- 1.96 
+  
+  estimate <- coefs[, "Estimate"]
+  se <- coefs[, "Std. Error"]
+  
+  lower <- estimate - z * se
+  upper <- estimate + z * se
+  
+  result <- data.frame(
+    Term = rownames(coefs),
+    Estimate = round(estimate, 4),
+    SE = round(se, 4), 
+    CI_lower = round(lower, 4),
+    CI_upper = round(upper,4))}
+
+print(CI_95(Cons_30_model))
+
 # PREDICTION 1B: Shorter HS have better survival
 # PREDICTION 2B: Larger broods have more survivors. 
 
@@ -491,12 +510,12 @@ clean_data <- chick_data %>%
   filter(abs(Mass - round(Mass)) < .Machine$double.eps^0.5)
 
 model_mass <- glmmTMB(Mass ~ Hatch_order + (1|Nest_ID) + (1|Year), 
-                      family = nbinom1, data = clean_data)
+                      family = gaussian, data = chick_data)
 diagnostics(model_mass)
 summary(model_mass)
 
 model_StoT <- glmmTMB(Shield_to_tip ~ as.numeric(Hatch_order) + (1|Nest_ID) +
-                      (1|Year), family = gaussian, data = clean_data)
+                      (1|Year), family = gaussian, data = chick_data)
 diagnostics(model_StoT)
 summary(model_StoT)
 
@@ -507,13 +526,16 @@ model_Tars <- glmmTMB(Tarsus ~ as.numeric(Hatch_order) + (1|Nest_ID) + (1|Year),
                       family = gaussian, data = tars_data)
 diagnostics(model_Tars)
 summary(model_Tars)
+print(CI_95(model_Tars))
 
 
-model_2_3d <- glmmTMB(as.numeric(Survived) ~ Mass +
+model_2_3d <- glmmTMB(as.numeric(Survived) ~ + Mass + Tarsus + `Shield to Tip` +
                      (1|Nest_ID) + (1|Year), family = binomial, 
                       data = chick_data_survival)
 diagnostics(model_2_3d)
 summary(model_2_3d)
+
+
 
 model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Tarsus + 
                         (1|Nest_ID) + (1|Year), family = binomial, 
@@ -557,6 +579,8 @@ ggplot(chick_data_longer, aes(x = Survived, y = Value)) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 11))
+
+
 
 ##############################
 ####      CHAPTER 3       ####
@@ -612,11 +636,13 @@ experiment_data <- read_excel("Compiled_synchrony_experiment_data.xlsx") %>%
   mutate(Treatment = recode(Treatment, "Synch" = "Synchronous",
                                        "Asynch" = "Asynchronous"), 
          Hatch_success = (Hatched/Manipulated_clutch_size), 
-         Foreign_percentage = (Foreign_eggs/Manipulated_clutch_size))
+         Foreign_percentage = (Foreign_eggs/Manipulated_clutch_size), 
+         Survive_success_brood = (Survival_60/Hatched), 
+         Survive_success_clutch = (Survival_60/Manipulated_clutch_size))
 
 # Further cleaning of the data set with successful nests
 successful_nests <- experiment_data %>% 
-  filter(Hatch_success >0) %>%
+  filter(Hatch_success > 0) %>%
   filter(!Nest_ID %in% "2024_W") %>%
   mutate(Date_found = as.Date(Date_found),
          Hatch_begin = as.Date(Hatch_begin), 
@@ -678,34 +704,87 @@ t.test(Transfered_time~Treatment, data = successful_nests_MT) # Transferred time
 ggplot(successful_nests, aes(x = Observed_nesting_period, y = Hatch_success)) +
   geom_point() 
 
+ggplot(successful_nests, aes(x = Observed_nesting_period, y = Survival_60)) +
+  geom_point()
 
 
 # Model analyzing number of hatched eggs by clutch size
 model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
-                     Treatment + Manipulated_clutch_size,
-                     family = betabinomial, data = successful_nests)
-diagnostics(model_1)
-summary(model_1)
-
-model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
-                     Treatment + Observed_nesting_period,
-                   family = betabinomial, data = successful_nests)
+                     Treatment + Manipulated_clutch_size + Observed_nesting_period
+                     + (1|Year), family = betabinomial, data = successful_nests)
 diagnostics(model_1)
 summary(model_1)
 
 # Model analyzing number of survivors by treatment.
 model_2 <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
-                   Treatment + Hatched + (1|Year), 
+                   Treatment + Hatched + Manipulated_clutch_size + (1|Year), 
                    family = betabinomial, data = successful_nests)
 diagnostics(model_2)
 summary(model_2)
 
-# Model analyzing number of survivors by treatment.
-model_2 <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
-                     Treatment + Observed_nesting_period + (1|Year), 
-                   family = betabinomial, data = successful_nests)
+successful_nests$Relatedness <- ifelse(successful_nests$Treatment == "Synchronous", 0.375, 0.5)
+successful_nests$Inclusive_Fitness_Hatch <- successful_nests$Hatch_success * successful_nests$Relatedness
+successful_nests$Inclusive_Fitness_Survive_Brood <- successful_nests$Survive_success_brood * successful_nests$Relatedness
+
+
+
+
+# Apply minimal shift away from exact 0 and 1:
+successful_nests$survival_success_brood_adj <- pmin(pmax(successful_nests$Survive_success_brood, 0.001), 0.999)
+
+# Then compute inclusive fitness:
+successful_nests$Inclusive_Fitness_Survive_Brood_adj <- successful_nests$survival_success_brood_adj * successful_nests$Relatedness
+
+
+model_2 <- glmmTMB(Inclusive_Fitness_Survive_Brood_adj ~ 
+                     Treatment + Hatched + Manipulated_clutch_size + (1|Year), 
+                   family = beta_family(), data = successful_nests)
 diagnostics(model_2)
 summary(model_2)
+
+
+
+
+
+
+n <- nrow(successful_nests)
+successful_nests$Inclusive_Fitness_adj <- (successful_nests$Inclusive_Fitness * (n - 1) + 0.5) / n
+
+
+model_hatch_fitness <- glmmTMB(Inclusive_Fitness_adj ~ Treatment + Manipulated_clutch_size +
+                           Observed_nesting_period + 
+                           (1|Year), family = beta_family(), 
+                         data = successful_nests)
+diagnostics(model_hatch_fitness)
+summary(model_hatch_fitness)
+
+model_survive_fitness <- glmmTMB(Inclusive_Fitness_adj ~ Treatment + Manipulated_clutch_size +
+                                 Observed_nesting_period + 
+                                 (1|Year), family = beta_family(), 
+                               data = successful_nests)
+diagnostics(model_survive_fitness)
+summary(model_survive_fitness)
+
+
+
+
+
+
+ggplot(successful_nests, aes(x = Treatment, y = Hatch_success)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess") +
+  theme_minimal()
+
+ggplot(successful_nests, aes(x = Treatment, y = Inclusive_Fitness)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess") +
+  theme_minimal()
+
+plot(fitted(model_fitness), residuals(model_fitness))
+abline(h = 0, col = "red")
+
+
+
 
 # Survival to 60 days pivoted longer format for the figure.
 survival_data_long <- successful_nests %>%
@@ -729,9 +808,42 @@ ggplot(survival_data_long, aes(x = Treatment, fill=factor(Treatment_survival))) 
                                "Synchronous_0" = "firebrick1"), guide = "none")
 
 
-# A post-hoc power analysis using the pwr package (Champely 2020) with the 
-# Hedge’s g effect size of 0.34 (95% CI: -0.439, 1.116) revealed we would 
-# have needed a sample size of 69 nests required to obtain statistical 
-# significance (alpha = 0.05) in hatching rate while maintaining 
-# sufficient power (1- β = 0.8).
+swapping_data <- read_excel("Egg_swapping.xlsx") %>%
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
+  filter(Number_nest_transfers == 1) %>%
+
+ggplot(synch_swaps, aes(x = Status, y = Hatch_order)) +
+  geom_jitter(width = 0.05, height = 0, alpha = 0.8) +
+  theme_classic()
+
+ggplot(asynch_swaps, aes(x = Status, y = Hatch_order)) +
+  geom_jitter(width = 0.05, height = 0, alpha = 0.8) +
+  theme_classic()
+  
+  
+synch_swaps <- subset(swapping_data, Treatment == "Synchronous")
+
+model_1 <- glmmTMB(Hatched ~ Status + (1|Nest_ID) +
+                   + (1|Year), family = binomial, data = synch_swaps)
+diagnostics(model_1)
+summary(model_1)
+
+asynch_swaps <- subset(swapping_data, Treatment == "Asynchronous")
+model_2 <- glmmTMB(Hatched ~ Status + (1|Nest_ID) +
+                     + (1|Year), family = binomial, data = asynch_swaps)
+diagnostics(model_2)
+summary(model_2)
+
+
+model_3 <- glmmTMB(Survived ~ Status + (1|Nest_ID) +
+                     + (1|Year), family = binomial, data = synch_swaps)
+diagnostics(model_3)
+summary(model_3)
+
+model_4 <- glmmTMB(Survived ~ Status + (1|Nest_ID) +
+                     + (1|Year), family = binomial, data = asynch_swaps)
+diagnostics(model_4)
+summary(model_4)
+
+
 
