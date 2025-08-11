@@ -62,12 +62,24 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
   mutate(Converted_na_1_prop = is.na(Relative_survive_success_1), 
          Converted_na_2_prop = is.na(Relative_survive_success_2))
 
-only_big_nests <- masterlist_data %>%
-  filter(Clutch_size >5)
 
-ggplot(only_big_nests, aes(x = Observed_nesting_period, y = Hatch_success)) +
-  geom_point() +
-  theme_classic()
+mean(masterlist_data$Clutch_size)
+sd(masterlist_data$Clutch_size)
+
+
+
+all_data <- read_excel("Nests_masterlist.xlsx",
+                              na = c("", "NO_RECORD", "MISSING")) %>%
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%  
+  filter(Exclusion == "GOOD" | Exclusion == "MISSING_HATCH_ORDER" | Exclusion == "FAILED") %>%
+  mutate(Hatch_success = (as.numeric(Hatched_eggs)/as.numeric(Clutch_size)*100)) %>%
+  mutate(end_date = if_else(Exclusion == "FAILED", Last_observed, Hatch_begin),
+    obs_nesting_period = as.numeric(end_date - Date_found, units = "days"))
+
+ggplot(all_data, aes(x = obs_nesting_period, y = Hatch_success)) +
+  geom_jitter(width = 1, height = 0.5, alpha = 0.8) +
+  theme_classic() +
+  labs(x = "Observed nesting period (days)", y = "Hatch success (%)")
 
 
 masterlist_data <- within(masterlist_data, {
@@ -188,8 +200,21 @@ survival_dif_results <- masterlist_data %>%
   arrange(diff)
 survival_dif_results
 
+nests_with_loss <- masterlist_data %>%
+  filter(!is.na(Survived_1), !is.na(Survived_2), Survived_1 > 0) %>%
+  mutate(diff = Survived_1 - Survived_2) %>%
+  filter(diff > 0) %>%   # positive diff = loss between 30 and 60 days
+  select(Nest_ID, Survived_1, Survived_2, diff)
+print(nests_with_loss)
 
+survived <- c(1,6,4,1,1,3,5,1.5,1.5,3)
+died <- c(2,3,2,2,4,3,5,1,2,7,3.5)
 
+mean(survived)
+sd(survived)
+
+mean(died)
+sd(died)
 
 # Pivoting data longer with 
 longer_data1 <- masterlist_data %>%
@@ -393,12 +418,24 @@ correlation_b
 # Prediction 3a: Positive correlation between lay order and hatch order
 
 laying_data <- read_excel("Lay_hatch_data.xlsx") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
-  filter(Known_lay_order < 10)
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) 
 
 laying_data_longer <- laying_data
   pivot_longer(cols = c(Hatch_order, Incubation_period),
              names_to = "Data", values_to = "Value")
+  
+
+  filter(Known_lay_order < 10)  
+  
+  laying_data %>%
+    filter(Known_lay_order %in% c(1, 5, 9.5)) %>%
+    group_by(Known_lay_order) %>%
+    summarise(
+      mean_time = mean(Incubation_period),
+      sd_time   = sd(Incubation_period, na.rm = TRUE),
+      .groups = "drop")
+  
+  
   
 ggplot(laying_data_longer, aes(x = Known_lay_order, y = Value)) +
   geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 0.7) +
@@ -413,28 +450,25 @@ ggplot(laying_data_longer, aes(x = Known_lay_order, y = Value)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 11))
 
+
 lay_order_model <- glmmTMB(Hatch_order ~ Known_lay_order + (1|Nest_ID), 
                            family = gaussian, data = laying_data)
 diagnostics(lay_order_model)  
 
 
-egg_size_model <- glmmTMB(Volume_cm_cubed ~ Known_lay_order + (1|Nest_ID), 
+egg_size_model <- glmmTMB(Volume_cm_cubed ~ Known_lay_order + (1|Nest_ID) + (1|Year), 
                           family = gaussian, data = laying_data)
 diagnostics(egg_size_model)
 summary(egg_size_model)
+print(CI_95(egg_size_model))
 
 
 correlation <- cor.test(as.numeric(laying_data$Known_lay_order), 
                as.numeric(laying_data$Hatch_order), method = 'pearson')
 print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
 
-nlme_model <- nlme(Incubation_period ~ a * exp(-b * Known_lay_order),
-                   data = laying_data,
-                   fixed = a + b ~ 1,
-                   random = a ~ 1 | Nest_ID,
-                   start = c(a = 1, b = 0.5))
-diagnostics(nlme_model)
-summary(nlme_model)
+
+
 
 
 #### PREDICTION 3b: Earlier hatched eggs have greater survival
@@ -451,7 +485,7 @@ chick_data[cols] <- masterlist_data[idx, cols]
 chick_data <- chick_data %>%
   filter(!(Mass > 35 | Tarsus > 40 | Shield_to_tip > 24))
 
-# Pivoting data longer then filtering out Tarsus mreasurements before 2019
+# Pivoting data longer then filtering out Tarsus measurements before 2019
 chick_data_longer <- chick_data %>%
   pivot_longer(cols = c('Mass', 'Tarsus', 'Shield_to_tip'), 
                names_to = 'Morphometrics', 
@@ -530,13 +564,64 @@ summary(model_Tars)
 print(CI_95(model_Tars))
 
 
+# Create a sequence of hatch orders for prediction
+pred_data <- data.frame(Hatch_order = seq(1, 10, length.out = 200))
+
+# Get predictions for each model
+pred_mass <- pred_data %>%
+  mutate(pred = predict(model_mass, newdata = ., re.form = NA, se.fit = TRUE)$fit,
+         se = predict(model_mass, newdata = ., re.form = NA, se.fit = TRUE)$se.fit,
+         lower = pred - 1.96 * se,
+         upper = pred + 1.96 * se,
+         Morphometrics = "Mass")
+
+pred_shield <- pred_data %>%
+  mutate(pred = predict(model_StoT, newdata = ., re.form = NA, se.fit = TRUE)$fit,
+         se = predict(model_StoT, newdata = ., re.form = NA, se.fit = TRUE)$se.fit,
+         lower = pred - 1.96 * se,
+         upper = pred + 1.96 * se,
+         Morphometrics = "Shield_to_tip")
+
+pred_tarsus <- pred_data %>%
+  mutate(pred = predict(model_Tars, newdata = ., re.form = NA, se.fit = TRUE)$fit,
+         se = predict(model_Tars, newdata = ., re.form = NA, se.fit = TRUE)$se.fit,
+         lower = pred - 1.96 * se,
+         upper = pred + 1.96 * se,
+         Morphometrics = "Tarsus")
+
+pred_all <- bind_rows(pred_mass, pred_shield, pred_tarsus)
+
+
+# Figure of chick size by hatch order
+ggplot(chick_data_longer, aes(x = Hatch_order, y = Value)) +
+  geom_jitter(width = 0.04, height = 0.1, size = 1, alpha = 0.7) +
+  facet_wrap(~Morphometrics, scales="free_y", ncol = 1, strip.position = "left",
+             labeller = labeller(Morphometrics = c(Mass = "Mass (g)",
+                                                   Tarsus = "Left outer\ntarsus (mm)", 
+                                                   Shield_to_tip = "Shield to\ntip (mm)"))) +
+  labs(x = "Hatch order", y = NULL) +
+  scale_x_continuous(breaks = seq(0, 10, 0.5),
+  labels = ifelse(seq(0, 10, by = 0.5) %% 1 == 0, seq(0, 10, by = 0.5), "")) +
+  scale_y_continuous(breaks = int_breaks_5, labels = scales::number_format(accuracy = 1)) +
+  theme_classic() +
+  geom_ribbon(data = pred_all,
+              aes(x = Hatch_order, ymin = lower, ymax = upper),
+              fill = "lightblue", alpha = 0.2, inherit.aes = FALSE) +
+  geom_line(data = pred_all,
+            aes(x = Hatch_order, y = pred),
+            color = "blue", linewidth = 0.75, inherit.aes = FALSE) +
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
+  theme(strip.background = element_blank(), strip.placement = "outside", 
+        strip.text = element_text(size = 11))
+
+
+
+# Survival stuff here
 model_2_3d <- glmmTMB(as.numeric(Survived) ~ + Mass + Tarsus + `Shield to Tip` +
                      (1|Nest_ID) + (1|Year), family = binomial, 
                       data = chick_data_survival)
 diagnostics(model_2_3d)
 summary(model_2_3d)
-
-
 
 model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Tarsus + 
                         (1|Nest_ID) + (1|Year), family = binomial, 
@@ -580,8 +665,6 @@ ggplot(chick_data_longer, aes(x = Survived, y = Value)) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 11))
-
-
 
 ##############################
 ####      CHAPTER 3       ####
@@ -716,12 +799,27 @@ model_1 <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~
 diagnostics(model_1)
 summary(model_1)
 
+model_1_random <- glmmTMB(cbind(Hatched, Manipulated_clutch_size - Hatched) ~ 
+                     Treatment + Manipulated_clutch_size + Observed_nesting_period,
+                   family = betabinomial, data = successful_nests)
+
+anova(model_1, model_1_random)
+
+
+
+
 # Model analyzing number of survivors by treatment.
 model_2 <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
                    Treatment + Hatched + Manipulated_clutch_size + (1|Year), 
                    family = betabinomial, data = successful_nests)
 diagnostics(model_2)
 summary(model_2)
+
+model_2_random <- glmmTMB(cbind(Survival_60, Hatched - Survival_60) ~ 
+                     Treatment + Hatched + Manipulated_clutch_size, 
+                   family = betabinomial, data = successful_nests)
+
+anova(model_2, model_2_random)
 
 successful_nests$Relatedness <- ifelse(successful_nests$Treatment == "Synchronous", 0.375, 0.5)
 successful_nests$Inclusive_Fitness_Hatch <- successful_nests$Hatch_success * successful_nests$Relatedness
@@ -770,11 +868,6 @@ diagnostics(model_survive_fitness)
 summary(model_survive_fitness)
 
 
-
-
-
-
-
 # Survival to 60 days pivoted longer format for the figure.
 survival_data_long <- successful_nests %>%
   mutate(NonSurvivors = Hatched - Survival_60) %>% 
@@ -813,6 +906,9 @@ ggplot(survival_data_long,
 swapping_data <- read_excel("Egg_swapping.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
   filter(Number_nest_transfers == 1) %>%
+  rename(Hatched_yes = Hatched) %>%
+  left_join(successful_nests %>% select(Nest_ID, Manipulated_clutch_size, Hatched),
+            by = "Nest_ID")
 
 ggplot(swapping_data, aes(x = Status, y = Hatch_order, colour = Treatment)) +
   geom_beeswarm(cex = 4.5) +
@@ -822,22 +918,37 @@ ggplot(swapping_data, aes(x = Status, y = Hatch_order, colour = Treatment)) +
   scale_y_continuous(breaks = seq(0, 8, by = 0.5),
                      labels = ifelse(seq(0, 8, by = 0.5) %% 
                                        1 == 0, seq(0, 8, by = 0.5), "")) +
-  scale_x_discrete(expand = expansion(mult = c(1, 1)), labels = c("Original" = "Non-swapped", "Swapped" = "Swapped")) +
+  scale_x_discrete(expand = expansion(mult = c(1, 1)), labels = c("Original" = "Non-fostered", "Swapped" = "Fostered")) +
   guides(color = guide_legend(title.position = "top", direction = "vertical")) +
   theme(legend.position = "right", legend.box = "vertical") +
   scale_color_manual(values=c("blue", "red"))
 
+
+ggplot(swapping_data, aes(x = Treatment, y = Hatch_order)) +
+  geom_beeswarm(cex = 2) +
+  theme_classic() +
+  labs(y = "Hatch Order", x = "") +
+  theme(axis.text.x = element_text(size = 11, colour = "black")) +
+  scale_y_continuous(breaks = seq(0, 8, by = 0.5),
+                     labels = ifelse(seq(0, 8, by = 0.5) %% 
+                                       1 == 0, seq(0, 8, by = 0.5), ""))
+
+
+
+
 ### Add clutch size to swapping data
-Swap_hatch_model <- glmmTMB(Hatched ~ Status*Treatment + Clutch_size + (1|Nest_ID) +
-                     + (1|Year), family = binomial, data = swapping_data)
-diagnostics(model_3)
-summary(model_3)
 
-Swap_survive_model <- glmmTMB(Survived ~ Status*Treatment + (1|Nest_ID) +
+Swap_hatch_model <- glmmTMB(Hatched_yes ~ Status*Treatment + Manipulated_clutch_size + (1|Nest_ID) +
                      + (1|Year), family = binomial, data = swapping_data)
-diagnostics(model_4)
+diagnostics(Swap_hatch_model)
+summary(Swap_hatch_model)
 
-model <- glmmTMB(Hatch_order ~ Status*Treatment + (1|Nest_ID), 
+Swap_survive_model <- glmmTMB(Survived ~ Status*Treatment + Hatch_order*Treatment + (1|Nest_ID) +
+                     + (1|Year), family = binomial, data = swapping_data)
+diagnostics(Swap_survive_model)
+summary(Swap_survive_model)
+
+model <- glmmTMB(Hatch_order ~ Status*Treatment + (1|Nest_ID) + (1|Year), 
                  family = gaussian, data = swapping_data)
 diagnostics(model)
 summary(model)
