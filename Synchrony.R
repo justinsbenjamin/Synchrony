@@ -418,24 +418,24 @@ correlation_b
 # Prediction 3a: Positive correlation between lay order and hatch order
 
 laying_data <- read_excel("Lay_hatch_data.xlsx") %>%
-  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) 
+  mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
+  filter(Hatch_success > 50) 
+  
+correlation <- cor.test(as.numeric(laying_data$Hatch_order), 
+                        as.numeric(laying_data$Known_lay_order), method = 'pearson')
+print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
+print(correlation)
 
-laying_data_longer <- laying_data
+laying_data <- laying_data %>%
+  mutate(lay_order_c1 = pmin(Known_lay_order, 6),
+         lay_order_c2 = pmax(Known_lay_order - 6, 0)) 
+         
+model_time_in_nest <- glmmTMB(Incubation_period ~ lay_order_c1 + lay_order_c2 + 
+                             (1|Nest_ID) + (1|Year), data = laying_data, family = gaussian)
+
+laying_data_longer <- laying_data %>%
   pivot_longer(cols = c(Hatch_order, Incubation_period),
-             names_to = "Data", values_to = "Value")
-  
-
-  filter(Known_lay_order < 10)  
-  
-  laying_data %>%
-    filter(Known_lay_order %in% c(1, 5, 9.5)) %>%
-    group_by(Known_lay_order) %>%
-    summarise(
-      mean_time = mean(Incubation_period),
-      sd_time   = sd(Incubation_period, na.rm = TRUE),
-      .groups = "drop")
-  
-  
+               names_to = "Data", values_to = "Value")
   
 ggplot(laying_data_longer, aes(x = Known_lay_order, y = Value)) +
   geom_jitter(width = 0.05, height = 0.05, size = 2, alpha = 0.7) +
@@ -444,30 +444,22 @@ ggplot(laying_data_longer, aes(x = Known_lay_order, y = Value)) +
   facet_wrap(~ Data, scales = "free_y", ncol = 1, strip.position = "left", 
             labeller = labeller(Data = c(Hatch_order = "Hatch order", 
             Incubation_period = "Time in nest (days)"))) +  
-  scale_x_continuous(breaks = seq(0, 10, by = 0.5),
-  labels = ifelse(seq(0, 10, by = 0.5) %% 1 == 0, seq(0, 10, by = 0.5), "")) +
+  scale_x_continuous(breaks = seq(0, 12, by = 0.5),
+  labels = ifelse(seq(0, 12, by = 0.5) %% 1 == 0, seq(0, 12, by = 0.5), "")) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
-        strip.text = element_text(size = 11))
+        strip.text = element_text(size = 12))
 
-
-lay_order_model <- glmmTMB(Hatch_order ~ Known_lay_order + (1|Nest_ID), 
-                           family = gaussian, data = laying_data)
-diagnostics(lay_order_model)  
-
+laying_data %>%
+  filter(Hatch_order %in% c(1, 6)) %>%
+  group_by(Hatch_order) %>%
+  summarise(mean_val = mean(Incubation_period, na.rm = TRUE),
+            sd_val   = sd(Incubation_period, na.rm = TRUE),
+            .groups = "drop") 
 
 egg_size_model <- glmmTMB(Volume_cm_cubed ~ Known_lay_order + (1|Nest_ID) + (1|Year), 
                           family = gaussian, data = laying_data)
-diagnostics(egg_size_model)
 summary(egg_size_model)
-print(CI_95(egg_size_model))
-
-
-correlation <- cor.test(as.numeric(laying_data$Known_lay_order), 
-               as.numeric(laying_data$Hatch_order), method = 'pearson')
-print(c(correlation$estimate, correlation$conf.int, correlation$p.value))
-
-
 
 
 
@@ -516,10 +508,6 @@ chick_data_survival <- chick_data %>%
 chick_data_survival <- chick_data_survival %>%
   filter(Hatched_eggs > 1)
 
-correlation <- cor(as.numeric(chick_data_survival$Hatch_order), 
-                   as.numeric(chick_data_survival$Clutch_size), method = 'pearson')
-correlation
-
 # Figure of survival by hatching order. 
 ggplot(chick_data_survival, aes(x = Hatch_order, y = as.character(Survived), colour = Year)) +
   geom_jitter(width = 0.2, height = 0, size = 2, alpha = 0.7) +
@@ -531,12 +519,22 @@ model_2_3a <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order) +
                   (1|Nest_ID) + (1|Year), family = binomial, data = chick_data_survival)
 diagnostics(model_2_3a)
 summary(model_2_3a)
+print(CI_95(model_2_3a))
 
 # Model with interaction between hatch order and hatching spread
-model_2_3c <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Hatch_spread +
+model_2_3b <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Hatch_spread +
                      (1|Nest_ID) + (1|Year), family = binomial, data = chick_data_survival)
+diagnostics(model_2_3b)
+summary(model_2_3b)
+print(CI_95(model_2_3b))
+
+model_2_3c <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Clutch_size +
+                        (1|Nest_ID) + (1|Year), family = binomial, data = chick_data_survival)
 diagnostics(model_2_3c)
 summary(model_2_3c)
+print(CI_95(model_2_3c))
+
+
 
 # PREDICTION 3c: Last hatched eggs are smaller as they spend more developmental
 # energy catching up to early hatching chicks. 
@@ -617,23 +615,16 @@ ggplot(chick_data_longer, aes(x = Hatch_order, y = Value)) +
 
 
 # Survival stuff here
-model_2_3d <- glmmTMB(as.numeric(Survived) ~ + Mass + Tarsus + `Shield to Tip` +
+model_2_3d <- glmmTMB(as.numeric(Survived) ~ Mass +
                      (1|Nest_ID) + (1|Year), family = binomial, 
                       data = chick_data_survival)
 diagnostics(model_2_3d)
 summary(model_2_3d)
+print(CI_95(model_2_3d))
 
-model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Tarsus + 
-                        (1|Nest_ID) + (1|Year), family = binomial, 
-                      data = chick_data_survival)
-diagnostics(model_2_3d)
-summary(model_2_3d)
 
-model_2_3d <- glmmTMB(as.numeric(Survived) ~ as.numeric(Hatch_order)*Shield_to_tip + 
-                        (1|Nest_ID) + (1|Year), family = binomial, 
-                      data = chick_data_survival)
-diagnostics(model_2_3d)
-summary(model_2_3d)
+
+
 
 # Figure of survival by size at hatching 
 chick_data_longer <- chick_data_longer %>%
