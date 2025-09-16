@@ -62,6 +62,20 @@ masterlist_data <- read_excel("Nests_masterlist.xlsx",
   mutate(Converted_na_1_prop = is.na(Relative_survive_success_1), 
          Converted_na_2_prop = is.na(Relative_survive_success_2))
 
+
+# Figures for defense presentation
+figure <- ggplot(masterlist_data, aes(x = Clutch_size, y = Hatched_eggs)) +
+  geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(x = "Clutch size", y = "Hatched eggs") +
+  scale_x_continuous(limits = c(2, 20), breaks = seq(2, 20, by = 2)) +
+  scale_y_continuous(limits = c(1, 11), breaks = seq(0, 11, by = 1)) 
+print(figure) 
+
+
+
+
 # Making Figure 2.1
 masterlist_data <- within(masterlist_data, {
   Clutch_size   <- as.numeric(Clutch_size)
@@ -248,6 +262,27 @@ figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value)) +
   theme(strip.background = element_blank(), strip.placement = "outside", 
         strip.text = element_text(size = 8))
 print(figure_2) 
+
+
+
+# Figures for defense presentation
+figure_2 <- ggplot(longer_data2, aes(x = Predictor_value, y = Value)) +
+  geom_jitter(width = 0.2, height = 0.05, alpha = 0.8) +
+  facet_grid(Data ~ Predictor, scales = "free", labeller = labeller(
+    Data = c(Relative_survive_success_2 = "Proportion of brood\nsurvived to 60 days", 
+             Hatch_success = "Proportion of clutch\n hatched (%) ", 
+             Relative_survive_success_1 = "Proportion of brood\nsurvived to 30 days"), 
+    Predictor = c(Clutch_size = "Clutch size", Hatch_spread = "Hatch spread (days)", 
+                  Hatched_eggs = "Hatched eggs")), switch = "both") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(x = NULL, y = NULL)+
+  theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5)) +
+  theme(strip.background = element_blank(), strip.placement = "outside", 
+        strip.text = element_text(size = 8))
+print(figure_2) 
+
+
 
 # Function to view model diagnostics 
 diagnostics <- function(model) {
@@ -637,6 +672,7 @@ successful_nests_long <- successful_nests %>%
                names_to = "Success", values_to = "Count")
 
 ggplot(successful_nests_long, aes(x = Treatment, y = Count, colour = Treatment)) +
+  geom_boxplot(outlier.shape = NA, width = 0.4, colour = "black") + # boxplot behind points
   geom_beeswarm(cex = 4.5) +
   theme_classic() +
   scale_colour_manual(values = c("Asynchronous" = "blue", "Synchronous" = "firebrick1")) +
