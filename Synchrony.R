@@ -36,6 +36,45 @@ nest_counts <- read_excel("Nests_masterlist.xlsx") %>%
   arrange(desc("nest_counts"))
 print(nest_counts)
 
+
+mayfield_data <- read_excel("Nests_masterlist.xlsx",
+                 na = c("", "NO_RECORD", "MISSING")) %>%
+         mutate(Hatch_begin = as.Date(Hatch_begin),
+                Hatch_end = as.Date(Hatch_end),
+                Hatch_spread = as.numeric(Hatch_end - Hatch_begin + 1),
+                Date_found = as.Date(Date_found), 
+                Last_observed = as.Date(Last_observed), 
+                Observed_nesting_period = ifelse(
+                Hatched_eggs > 0, 
+                as.numeric(Hatch_begin - Date_found), 
+                as.numeric(Last_observed - Date_found)),
+                Hatch_success = as.numeric(Hatched_eggs) / as.numeric(Clutch_size)) %>%
+         filter(!is.na(Observed_nesting_period),
+                !is.na(Hatched_eggs))
+
+# Extract observation days (exposure)
+Obs_period <- mayfield_data$Observed_nesting_period
+
+# Define failures: nests with 0 hatched eggs
+Failures <- ifelse(mayfield_data$Hatched_eggs == 0, 1, 0)
+
+# Total nest-days at risk
+total_days <- sum(Obs_period, na.rm = TRUE)
+
+# Total failures
+total_failures <- sum(Failures, na.rm = TRUE)
+
+# Daily failure and survival rates
+daily_failure <- total_failures / total_days
+daily_survival <- 1 - daily_failure
+
+daily_failure
+daily_survival
+prob_nest_survival <- daily_survival^28.6
+
+
+
+
 masterlist_data <- read_excel("Nests_masterlist.xlsx",
   na = c("", "NO_RECORD", "MISSING")) %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%  
@@ -652,14 +691,16 @@ pred_df_sub <- pred_df %>%
 # Round nicely
   pred_df_sub <- pred_df_sub %>%
     mutate(
-      Predicted = round(Predicted, 2),
-      Lower = round(Lower, 2),
-      Upper = round(Upper, 2))
+      Predicted = Predicted*0.5456363,
+      Lower = Lower*0.5456363,
+      Upper = Upper*0.5456363)
   return(pred_df_sub)}
 
 subset_table_hatch <- get_subset_table(pred_df)
 subset_table_hatch
 write.table(subset_table_hatch, pipe("pbcopy"), sep = "\t", row.names = FALSE, quote = FALSE)
+
+
 
 # Figure 2.3
 predicted_hatched_eggs_fig <-  ggplot(subset_table_hatch, aes(x = Clutch_size, y = Predicted,
@@ -670,7 +711,7 @@ predicted_hatched_eggs_fig <-  ggplot(subset_table_hatch, aes(x = Clutch_size, y
   scale_color_manual(values = c("1" = "red","5" = "grey35","9" = "blue"),name = "Hatch spread") +
   scale_fill_manual(values = c("1" = "lightpink","5" = "grey70","9" = "lightblue"),name = "Hatch spread") +
   scale_x_continuous(expand = expansion(mult = c(0, .05)), breaks = seq(2,18,2), limits = c(2,18)) +
-  scale_y_continuous(expand = expansion(mult = c(0, .05)), breaks = seq(0,14,2), limits = c(0,14)) +
+  scale_y_continuous(expand = expansion(mult = c(0, .05)), breaks = seq(0,8,2), limits = c(0,8)) +
   labs(x = "Clutch size",
        y = "Predicted number of hatched eggs") +
   theme_classic(base_size = 12) +
@@ -820,6 +861,11 @@ laying_data <- read_excel("Lay_hatch_data.xlsx") %>%
   mutate(Nest_ID = paste(Year, Nest_ID, sep = "_")) %>%
   filter(Hatch_success > 50) 
 
+laying_data_success <- read_excel("Lay_hatch_data.xlsx") %>%
+  filter(Known_lay_order == 1)
+mean_incubation <- mean(laying_data_success$Incubation_period, na.rm = TRUE)
+
+
 # Correlation of lay order and hatch order
 correlation_lay_hatch <- cor.test(as.numeric(laying_data$Hatch_order), 
                         as.numeric(laying_data$Known_lay_order), method = 'pearson')
@@ -842,64 +888,115 @@ print(CI_95(model_time_in_nest))
 anova(model_time_in_nest, model_time_in_nest_nonest)
 anova(model_time_in_nest, model_time_in_nest_noyear)
 
+
 # Model predictions for linear regressions
+Lay_hatch_order_model <- glmmTMB(Hatch_order ~ Known_lay_order + (1|Year), family = gaussian,
+                                 data = laying_data)
 pred_data <- data.frame(Known_lay_order = seq(1, 11, length.out = 200))
 
-model_lay_hatch <- glmmTMB(Hatch_order ~ Known_lay_order + 
-                          (1|Nest_ID) + (1|Year), data = laying_data, family = gaussian)
+pred_df <- predict(Lay_hatch_order_model, 
+                   newdata = pred_data, 
+                   type = "response", 
+                   re.form = NA, 
+                   se.fit = TRUE)
+
+add_prediction <- function(pred_df, xvar) {
+  list(geom_line(
+    data = pred_df,
+    aes(x = !!sym(xvar), y = fit),
+    color = "blue", size = 1, inherit.aes = FALSE),
+    geom_ribbon(
+      data = pred_df,
+      aes(x = !!sym(xvar), ymin = lower, ymax = upper),
+      fill = "lightblue", alpha = 0.3, inherit.aes = FALSE))}
+
+Lay_hatch_order_model <- glmmTMB(
+  Hatch_order ~ Known_lay_order + (1|Year),
+  family = gaussian, data = laying_data)
+
+pred_data <- data.frame(Known_lay_order = seq(1, 11, length.out = 200))
+
+preds <- predict(Lay_hatch_order_model,
+                 newdata = pred_data,
+                 type = "response",
+                 re.form = NA,
+                 se.fit = TRUE)
 
 pred_lay_hatch <- pred_data %>%
-  mutate(pred = predict(model_lay_hatch, type = "response", newdata = ., re.form = NA, se.fit = TRUE)$fit,
-         se = predict(model_lay_hatch, type = "response", newdata = ., re.form = NA, se.fit = TRUE)$se.fit,
-         lower = pred - 1.96 * se,
-         upper= pred + 1.96 * se)
+  mutate(fit   = preds$fit,
+         se    = preds$se.fit,
+         lower = fit - 1.96 * se,
+         upper = fit + 1.96 * se)
 
-# Model predictions for linear regressions
-model_incubation <- glmmTMB(Incubation_period ~ Known_lay_order + (1|Nest_ID)
-                             + (1|Year), disp = ~ Known_lay_order, 
-                            data = laying_data, family = gaussian)
-pred_incubation <- pred_data %>%
-  mutate(pred = predict(model_incubation, type = "response", newdata = ., re.form = NA, se.fit = TRUE)$fit,
-         se = predict(model_incubation, type = "response", newdata = ., re.form = NA, se.fit = TRUE)$se.fit,
-         lower = pred - 1.96 * se,
-         upper = pred + 1.96 * se)
+pred_data2 <- data.frame(Known_lay_order = 1:11) %>%
+  mutate(lay_order_c1 = pmin(Known_lay_order, 6),
+         lay_order_c2 = pmax(Known_lay_order - 6, 0))
 
-var_labels <- c(Known_lay_order = "Lay order",
-                Hatch_order = "Hatch order",
-                Incubation_period = "Time in nest (days)")
+preds2 <- predict(model_time_in_nest,
+                  newdata = pred_data2,
+                  type = "response",
+                  re.form = NA,
+                  se.fit = TRUE)
 
-axis_breaks <- list(Known_lay_order = seq(1, 11, 1),
-                    Hatch_order = seq(1, 10, 1),
-                    Incubation_period = seq(21, 33, 2))
+incubation_df <- pred_data2 %>%
+  mutate(fit   = preds2$fit,
+         se    = preds2$se.fit,
+         lower = fit - 1.96 * se,
+         upper = fit + 1.96 * se)
 
-axis_limits <- list(Known_lay_order = c(1, 11),
-                    Hatch_order = c(1, 10),
-                    Incubation_period = c(20.5, 33))
+var_labels <- c(
+  Known_lay_order = "Lay order",
+  Hatch_order = "Hatch order",
+  Incubation_period = "Time in nest (days)")
 
-# Figure 2.4
+axis_breaks <- list(
+  Known_lay_order = seq(1, 11, 1),
+  Hatch_order = seq(1, 10, 1),
+  Incubation_period = seq(21, 33, 2))
+
+axis_limits <- list(
+  Known_lay_order = c(1, 11),
+  Hatch_order = c(1, 10),
+  Incubation_period = c(20.5, 33))
+
+
 make_plot <- function(data, xvar, yvar, label = NULL) {
   ggplot(data, aes_string(xvar, yvar)) +
     geom_jitter(width = 0.1, height = 0.1, alpha = 0.8) +
     labs(x = var_labels[xvar], y = var_labels[yvar], title = label) +
-    theme_classic(base_size = 9) +  
+    theme_classic(base_size = 9) +
     scale_x_continuous(breaks = seq(0, 11, 0.5),
-                       labels = ifelse(seq(0, 11, by = 0.5) %% 1 == 0, seq(0, 11, by = 0.5), "")) +
-    scale_y_continuous(breaks = axis_breaks[[yvar]], limits = axis_limits[[yvar]], labels = label_number(accuracy = 1, pad = TRUE)) +
+                       labels = ifelse(seq(0, 11, by = 0.5) %% 1 == 0,
+                                       seq(0, 11, by = 0.5), "")) +
+    scale_y_continuous(breaks = axis_breaks[[yvar]],
+                       limits = axis_limits[[yvar]],
+                       labels = scales::label_number(accuracy = 1, pad = TRUE)) +
     theme(plot.title = element_text(hjust = 0, face = "bold", color = "black", size = 12, margin = margin(b=1)),
           axis.text  = element_text(size = 8, color = "black"),
           axis.title = element_text(size = 10), 
           panel.spacing = unit(0.01, "lines"), 
           plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5))}
 
-pA24 <- make_plot(laying_data, "Known_lay_order", "Hatch_order") + only_left + 
-  invisible_x + ggtitle("A") + add_prediction(pred_lay_hatch, "Known_lay_order") +
+pA24 <- make_plot(laying_data, "Known_lay_order", "Hatch_order") +
+  ggtitle("A") +
+  add_prediction(pred_lay_hatch, "Known_lay_order") +
   scale_y_continuous(breaks = seq(0, 10, 0.5),
-                     labels = ifelse(seq(0, 10, by = 0.5) %% 1 == 0, seq(0, 10, by = 0.5), ""))
-pB24 <- make_plot(laying_data, "Known_lay_order", "Incubation_period") + only_left + only_bottom + ggtitle("B") + add_prediction(pred_incubation, "Known_lay_order")
+                     labels = ifelse(seq(0, 10, by = 0.5) %% 1 == 0,
+                                     seq(0, 10, by = 0.5), ""))
 
-row1 <- plot_grid(pA, ncol = 1)
-row2 <- plot_grid(pB, ncol = 1)
-figure24 <- plot_grid(row1, row2, ncol = 1, align = "v") 
+pB24 <- make_plot(laying_data, "Known_lay_order", "Incubation_period") +
+  only_left + only_bottom + ggtitle("B") +
+  geom_line(data = incubation_df,
+    aes(x = Known_lay_order, y = fit_smooth),
+    colour = "blue", size = 1,
+    inherit.aes = FALSE) +
+  geom_ribbon(
+    data = incubation_df,
+    aes(x = Known_lay_order, ymin = lower, ymax = upper),
+    fill = "lightblue", alpha = 0.3,
+    inherit.aes = FALSE)
+
+figure24 <- plot_grid(pA24, pB24, ncol = 1, align = "v")
 figure24
 
 
